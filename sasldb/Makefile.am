@@ -44,25 +44,16 @@
 # Note that this doesn't necessaraly follow the libsasl2 verison info
 sasl_version = 1:25:0
 
-INCLUDES=-I$(top_srcdir)/include -I$(top_builddir)/include @SASL_DB_INC@
+AM_CPPFLAGS=-fPIC -I$(top_srcdir)/include -I$(top_builddir)/include @SASL_DB_INC@
 
-extra_common_sources = db_none.c db_ndbm.c db_gdbm.c db_berkeley.c
+extra_common_sources = db_none.c db_lmdb.c db_ndbm.c db_gdbm.c db_berkeley.c
 
 EXTRA_DIST = NTMakefile
 
 noinst_LTLIBRARIES = libsasldb.la
-noinst_LIBRARIES = libsasldb.a
 
 libsasldb_la_SOURCES = allockey.c sasldb.h
 EXTRA_libsasldb_la_SOURCES = $(extra_common_sources)
 libsasldb_la_DEPENDENCIES = $(SASL_DB_BACKEND)
-libsasldb_la_LIBADD = $(SASL_DB_BACKEND) 
-
-# Prevent make dist stupidity
-libsasldb_a_SOURCES =
-EXTRA_libsasldb_a_SOURCES =
-
-libsasldb.a: libsasldb.la $(SASL_DB_BACKEND_STATIC)
-	$(AR) cru .libs/$@ $(SASL_DB_BACKEND_STATIC)
-
-
+libsasldb_la_LIBADD = $(SASL_DB_BACKEND)
+libsasldb_la_LDFLAGS = -no-undefined

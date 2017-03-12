@@ -79,7 +79,6 @@ auth_krb5_init (
   )
 {
 #ifdef AUTH_KRB5
-    int rc;
     char *configname = 0;
 
     if (krbtf_init() == -1) {
@@ -102,8 +101,8 @@ auth_krb5_init (
     }
 
     if (config) {
-	keytabname = cfile_getstring(config, "krb5_keytab", keytabname);
-	verify_principal = cfile_getstring(config, "krb5_verify_principal", verify_principal);
+	keytabname = (char *) cfile_getstring(config, "krb5_keytab", keytabname);
+	verify_principal = (char *) cfile_getstring(config, "krb5_verify_principal", verify_principal);
     }
 
     return 0;
@@ -127,6 +126,15 @@ form_principal_name (
     const char *forced_instance = 0;
 	int plen;
 
+    plen = strlcpy(pname, user, pnamelen);
+    user = pname;
+
+    if (config && cfile_getswitch(config, "krb5_conv_krb4_instance", 0)) {
+       char *krb4_instance;
+
+       if ((krb4_instance = strchr(pname, '.'))) *krb4_instance = '/';
+    }
+
     if (config) {
 	char keyname[1024];
 
@@ -137,7 +145,7 @@ form_principal_name (
     if (forced_instance) {
 	char *user_specified;
 
-	if (user_specified = strchr(user, '/')) {
+	if ((user_specified = strchr(user, '/'))) {
 	    if (strcmp(user_specified + 1, forced_instance)) {
 		/* user not allowed to override sysadmin */
 		return -1;
@@ -149,8 +157,7 @@ form_principal_name (
     }
 
     /* form user[/instance][@realm] */
-    plen = snprintf(pname, pnamelen, "%s%s%s%s%s",
-	user,
+    plen += snprintf(pname+plen, pnamelen-plen, "%s%s%s%s",
 	(forced_instance ? "/" : ""),
 	(forced_instance ? forced_instance : ""),
 	((realm && realm[0]) ? "@" : ""),
@@ -338,7 +345,9 @@ static int k5support_verify_tgt(krb5_context context,
     /* all is good now */
     result = 1;
  fini:
-    krb5_free_data_contents(context, &packet);
+    if (!k5_retcode) {
+        krb5_free_data_contents(context, &packet);
+    }
     krb5_free_principal(context, server);
     
     return result;
@@ -415,9 +424,9 @@ auth_krb5 (
     krb5_get_init_creds_opt_init(&opts);
     /* 15 min should be more than enough */
     krb5_get_init_creds_opt_set_tkt_life(&opts, 900); 
-    if (code = krb5_get_init_creds_password(context, &creds, 
-				     auth_user, password, NULL, NULL, 
-				     0, NULL, &opts)) {
+    if ((code = krb5_get_init_creds_password(context, &creds, 
+                                             auth_user, password, NULL, NULL, 
+                                             0, NULL, &opts))) {
 	krb5_cc_destroy(context, ccache);
 	krb5_free_principal(context, auth_user);
 	krb5_free_context(context);

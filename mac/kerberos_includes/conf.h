@@ -1,7 +1,7 @@
 /*
- * $Source: /afs/andrew/system/cvs/src/sasl/mac/kerberos_includes/conf.h,v $
+ * $Source: /cvs/src/sasl/mac/kerberos_includes/conf.h,v $
  * $Author: rjs3 $
- * $Header: /afs/andrew/system/cvs/src/sasl/mac/kerberos_includes/conf.h,v 1.2 2001/12/04 02:06:05 rjs3 Exp $
+ * $Header: /cvs/src/sasl/mac/kerberos_includes/conf.h,v 1.2 2001/12/04 02:06:05 rjs3 Exp $
  *
  * Copyright 1988 by the Massachusetts Institute of Technology.
  *

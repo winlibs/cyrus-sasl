@@ -1,0 +1,14 @@
+Makefile.in
+Makefile
+.deps
+.libs
+*.l[ao]
+*.o
+smtptest
+testsuite
+testsuitestatic
+sasldblistusers2
+dbconverter-2
+dbconverter-1.5.9
+saslpasswd2
+pluginviewer

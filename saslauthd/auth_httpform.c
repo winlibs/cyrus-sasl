@@ -57,6 +57,8 @@
 #ident "$Id: auth_httpform.c,v 1.2 2006/04/19 19:51:04 murch Exp $"
 #endif
 
+#include <config.h>
+
 /* PUBLIC DEPENDENCIES */
 #include <unistd.h>
 #include <stdlib.h>
@@ -73,6 +75,7 @@
 #include <arpa/inet.h>
 #include <signal.h>
 #include <netdb.h>
+#include <stdio.h>
 
 #include "mechanisms.h"
 #include "utils.h"
@@ -168,7 +171,7 @@ static char *url_escape(
     size_t length = strlen(string);
     size_t alloc = length+50;   /* add some reserve */
     char *out;
-    int outidx=0, inidx=0;
+    size_t outidx=0, inidx=0;
     /* END VARIABLES */
 
     out = malloc(alloc);
@@ -179,8 +182,7 @@ static char *url_escape(
         char in = string[inidx];
         if (!(in >= 'a' && in <= 'z') &&
             !(in >= 'A' && in <= 'Z') &&
-            !(in >= '0' && in <= '9') &&
-            in != '&' && in != '=' && in != '-' && in != '_') {
+            !(in >= '0' && in <= '9')) {
 
             /* encode it */
             if (outidx+3 > alloc) {
@@ -235,19 +237,28 @@ static char *create_post_data(
 {
     /* VARIABLES */
     const char *ptr, *line_ptr;
-    char *buf, *buf_ptr;
+    char *esc_user = NULL, *esc_password = NULL, *esc_realm = NULL;
+    char *buf = NULL, *buf_ptr;
     int filtersize;
     int ulen, plen, rlen;
     int numpercents=0;
     int biggest;
     size_t i;
     /* END VARIABLES */
+
+    user = esc_user = url_escape(user);
+    password = esc_password = url_escape(password);
+    realm = esc_realm = url_escape(realm);
+    if (!user || !password || !realm) {
+        logger(LOG_ERR, "auth_httpform:create_post_data", "failed to allocate memory");
+        goto CLEANUP;
+    }
     
     /* calculate memory needed for creating the complete query string. */
     ulen = strlen(user);
     plen = strlen(password);
     rlen = strlen(realm);
-    
+
     /* what if we have multiple %foo occurrences in the input query? */
     for (i = 0; i < strlen(formdata); i++) {
         if (formdata[i] == '%') {
@@ -266,7 +277,7 @@ static char *create_post_data(
     
     if (!buf) {
         logger(LOG_ERR, "auth_httpform:create_post_data", "failed to allocate memory");
-        return NULL;
+        goto CLEANUP;
     }
     
     buf_ptr = buf;
@@ -307,6 +318,20 @@ static char *create_post_data(
 
     /* don't forget the rest */    
     memcpy(buf_ptr, line_ptr, strlen(line_ptr)+1);
+
+CLEANUP:
+    if (esc_user) {
+        memset(esc_user, 0, strlen(esc_user));
+        free(esc_user);
+    }
+    if (esc_password) {
+        memset(esc_password, 0, strlen(esc_password));
+        free(esc_password);
+    }
+    if (esc_realm) {
+        memset(esc_realm, 0, strlen(realm));
+        free(esc_realm);
+    }
 
     return buf;
 }
@@ -462,8 +487,8 @@ auth_httpform (
   /* PARAMETERS */
   const char *user,			/* I: plaintext authenticator */
   const char *password,			/* I: plaintext password */
-  const char *service,
-  const char *realm
+  const char *service __attribute__((unused)),
+  const char *realm                    /* I: user's realm */
   /* END PARAMETERS */
   )
 {
@@ -471,8 +496,6 @@ auth_httpform (
     int s=-1;                           /* socket to remote auth host   */
     struct addrinfo *r;                 /* remote socket address info   */
     char *req;                          /* request, with user and pw    */
-    char *escreq;                       /* URL-escaped request          */
-    char *c;                            /* scratch pointer              */
     int rc;                             /* return code scratch area     */
     char postbuf[RESP_LEN];             /* request buffer               */
     int postlen;                        /* length of post request       */
@@ -535,14 +558,6 @@ auth_httpform (
         syslog(LOG_WARNING, "auth_httpform: create_post_data == NULL");
         return strdup(RESP_IERROR);
     }
-    escreq = url_escape(req);
-    if (escreq == NULL) {
-        memset(req, 0, strlen(req));
-        free(req); 
-        close(s);
-        syslog(LOG_WARNING, "auth_httpform: url_escape == NULL");
-        return strdup(RESP_IERROR);
-    }
 
     postlen = snprintf(postbuf, RESP_LEN-1,
               "POST %s HTTP/1.1" CRLF
@@ -552,11 +567,11 @@ auth_httpform (
               "Content-Type: application/x-www-form-urlencoded" CRLF
               "Content-Length: %d" TWO_CRLF
               "%s",
-              r_uri, r_host, r_port, strlen(escreq), escreq);
+              r_uri, r_host, r_port, (int)strlen(req), req);
 
     if (flags & VERBOSE) {
         syslog(LOG_DEBUG, "auth_httpform: sending %s %s %s",
-               r_host, r_uri, escreq);
+               r_host, r_uri, req);
     }
     
     /* send it */
@@ -568,8 +583,6 @@ auth_httpform (
         syslog(LOG_WARNING, "auth_httpform: failed to send request");
         memset(req, 0, strlen(req));
         free(req); 
-        memset(escreq, 0, strlen(escreq));
-        free(escreq);
         memset(postbuf, 0, postlen);
         close(s);
         return strdup(RESP_IERROR);
@@ -578,8 +591,6 @@ auth_httpform (
     /* don't need these any longer */
     memset(req, 0, strlen(req));
     free(req); 
-    memset(escreq, 0, strlen(escreq));
-    free(escreq);
     memset(postbuf, 0, postlen);
 
     /* read and parse the response */

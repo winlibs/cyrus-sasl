@@ -1,0 +1,16 @@
+autom4te*.cache
+stamp-h.in
+config.h.in*
+Makefile.in
+aclocal.m4
+configure
+config.log
+config.h
+config.cache
+libtool
+config.status
+stamp-h1
+Makefile
+*.pyc
+docsrc/.doctrees/
+docsrc/build/

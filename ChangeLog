@@ -1,14 +1,209 @@
+2016-10-18  Ken Murchison <murch@andrew.cmu.edu>
+	* Fixed potential DoS attack on saslauthd/doors (from Oracle)
+
+2016-06-30  Ken Murchison <murch@andrew.cmu.edu>
+	* plugins/ntlm.c, otp.c: support OpenSSL 1.1
+
+2016-06-14  Ken Murchison <murch@andrew.cmu.edu>
+	* plugins/digestmd5.c: Fix memory leak in client step 2
+
+2016-03-24  Ken Murchison <murch@andrew.cmu.edu>
+	* auth_rimap.c: Don't hang when IMAP server closes connection
+
+2016-01-29  Ken Murchison <murch@andrew.cmu.edu>
+	* Build fixes from Ignacio Casal Quinteiro
+
+2015-12-26  Ken Murchison <murch@andrew.cmu.edu>
+	* Build fixes from Ignacio Casal Quinteiro
+
+2015-11-16  Ken Murchison <murch@andrew.cmu.edu>
+	* Build fixes from Ignacio Casal Quinteiro
+
+2015-10-14  Ken Murchison <murch@andrew.cmu.edu>
+	* Build fixes from Ignacio Casal Quinteiro
+
+2015-07-17  Ken Murchison <murch@andrew.cmu.edu>
+	* auth_krb5.c: added krb5_conv_krb4_instance option
+
+2014-11-17  Ken Murchison <murch@andrew.cmu.edu>
+	* plugins/digestmd5.c: Fix memory leaks
+
+2014-11-17  Ken Murchison <murch@andrew.cmu.edu>
+	* plugins/digestmd5.c: prevent going from step 3 to step 2
+
+2013-09-13  Alexey Melnikov <alexey.melnikov@isode.com>
+	* Fix memory leaks in DIGEST
+
+2013-08-30  Ken Murchison <murch@andrew.cmu.edu>
+	* plugins/digestmd5.c: only locate reauth cache when reauth is
+	  enabled
+
+2013-07-11  Alexey Melnikov <alexey.melnikov@isode.com>
+	* Treat SCRAM and DIGEST as more secure than PLAIN when selecting
+	  client-side mechanism
+
+2013-07-11  Alexey Melnikov <alexey.melnikov@isode.com>
+	* Handle NULL return from crypt()
+
+2012-11-20  Alexey Melnikov <alexey.melnikov@isode.com>
+	* Added support for lmdb
+
+2012-11-19  Alexey Melnikov <alexey.melnikov@isode.com>
+	* Final 2.1.26 tagged and released by Ken.
+
+2012-07-06  Alexey Melnikov <alexey.melnikov@isode.com>
+	* saslauthd/auth_krb5.c: Fixed a crash in the auth_krb5.c
+	  (bug # 2706). Patch by Nalin Dahyabhai.
+
+2012-07-03  Alexey Melnikov <alexey.melnikov@isode.com>
+	* config/ltconfig: Fixed incorrect Darwin version matching in ltconfig
+	  (bug # 3713). Patch by Joshua Root.
+
+2012-06-08  Alexey Melnikov <alexey.melnikov@isode.com>
+	* Fixed PLAIN/LOGIN authentication failure when using saslauthd
+	  with no auxprop plugins (bug # 3590).
+
+2012-06-08  Alexey Melnikov <alexey.melnikov@isode.com>
+	* Added generation of pkg-config .pc file for Cyrus SASL.
+	  Patch by Dilyan Palauzov.
+
+2012-06-03  Alexey Melnikov <alexey.melnikov@isode.com>
+	* Correctly updated libtool version for libsasl and its plugins due
+	  to ABI changes (bug # 3692).
+
+2012-06-02  Alexey Melnikov <alexey.melnikov@isode.com>
+	* Better error reporting from auth_getpwent.c/auth_shadow.c
+	  (bug # 3134). Based on a patch by Greg A. Woods.
+
+2012-06-02  Alexey Melnikov <alexey.melnikov@isode.com>
+	* Improved error logging on failure to load plugins.
+	  Patch by Greg A. Woods.
+
+2012-05-30  Alexey Melnikov <alexey.melnikov@isode.com>
+	* plugins/otp.c, plugins/srp.c: Removed calling of EVP_cleanup()
+	  on SRP/OTP plugin shutdown
+
+2012-05-30  Alexey Melnikov <alexey.melnikov@isode.com>
+	* saslauthd/auth_httpform.c: Encode the parameter values passed to
+	  auth_httpform, not the whole POST data.
+
+2012-05-30  Alexey Melnikov <alexey.melnikov@isode.com>
+	* lib/config.c, saslauthd/cfile.c: Fixed file descriptor leaks
+	  throughout the code (bug # 3702). Slightly reformatted patch
+	  by Manfred Weichel.
+
+2012-05-29  Alexey Melnikov <alexey.melnikov@isode.com>
+	* bug in "saslauthd -a rimap" - not reading the whole IMAP greeting
+	  (bug # 3211). Patch from Lutz Mark (via Red Hat)
+
+2012-05-29  Alexey Melnikov <alexey.melnikov@isode.com>
+	* Modernize SASL malloc/realloc callback prototypes
+
+2012-05-29  Alexey Melnikov <alexey.melnikov@isode.com>
+	* lib/saslutil.c: Fixed broken logic in get_fqhostname() when
+	  abort_if_no_fqdn is 0 (bug # 3589). Patch by baggins@pld-linux.org
+
+2012-05-28  Alexey Melnikov <alexey.melnikov@isode.com>
+	* sasldb/db_berkeley.c, utils/dbconverter-2.c: Added support for
+	  BerkleyDB 5.X or later (Patch by Howard Chu)
+
+2012-04-20  Alexey Melnikov <alexey.melnikov@isode.com>
+	* lib/client.c, lib/server.c, lib/saslint.h: Make server and client
+	  side global callbacks private to server.c/client.c respectively
+
+2012-02-10  Ken Murchison <murch@andrew.cmu.edu>
+	* plugins/digestmd5.c: better handling of HTTP reauth cases.
+
+2012-01-28  Ken Murchison <murch@andrew.cmu.edu>
+	* plugins/digestmd5.c: Correctly send "stale" directive to prevent
+	  clients from (re)promtping for password
+
+2011-11-25  Alexey Melnikov <alexey.melnikov@isode.com>
+	* plugins/gs2.c: Updated GS2 plugin not to lose minor GSS-API
+	  status codes on errors (based on a patch from Ralf Haferkamp
+	  <rhafer@suse.de>)
+
+2011-11-21  Alexey Melnikov <alexey.melnikov@isode.com>
+	* plugins/gssapi.c: Only check out_flags once authentication is
+	  successfully completed
+
+2011-11-09  Ken Murchison <murch@andrew.cmu.edu>
+	* cmulocal/sasl2.m4, plugins/gssapi.c, utils/testsuite.c:
+	  Added GSS-SPNEGO plugin which can also be used for HTTP
+	  Negotiate authentication (RFC 4559)
+
+2011-11-08  Ken Murchison <murch@andrew.cmu.edu>
+	* plugins/ntlm.c: Flag client-side of NTLM plugin as HTTP-ready
+
+2011-11-08  Ken Murchison <murch@andrew.cmu.edu>
+	* include/saslutil.h, lib/config.c, lib/server.c
+	  Added sasl_config_done() to plug a memory leak when using an
+	  application specific config file
+
+2011-10-07  Alexey Melnikov <alexey.melnikov@isode.com>
+	* plugins/gssapi.c: Fixed a segfault in gssapi.c
+	  (patch by Phil Pennock)
+
+2011-09-22  Alexey Melnikov <alexey.melnikov@isode.com>
+	* config/ltconfig, saslauthd/config/ltconfig: Fixed Cyrus SASL
+	  build on some versions of Mac OS.
+
+2011-09-22  Alexey Melnikov <alexey.melnikov@isode.com>
+	* saslauthd/auth_rimap.c: qstring incorrectly appending
+	  the closing double quote. (Merge from RedHat)
+
+2011-09-22  Alexey Melnikov <alexey.melnikov@isode.com>
+	* lib/common.c: unlock the mutex in sasl_dispose if the context
+	  was freed by another thread. (Merge from RedHat)
+
+2011-09-22  Alexey Melnikov <alexey.melnikov@isode.com>
+	* Makefile.am: "lib" should be built before "plugins"
+	  (Patch from marcandre.lureau@redhat.com)
+
+2011-09-22  Alexey Melnikov <alexey.melnikov@isode.com>
+	* lib/saslutil.c: MINGW32 doesn't have rand_s
+	  (Patch from marcandre.lureau@redhat.com)
+
+2011-09-22  Alexey Melnikov <alexey.melnikov@isode.com>
+	* configure.in: Various build fixes for MINGW32
+	  (including defining sleep())
+	  (Patch from marcandre.lureau@redhat.com)
+
+2011-09-15  Alexey Melnikov <alexey.melnikov@isode.com>
+	* sample/client.c: Added additional typecasts to kill warnings
+	  about incompatible callback types
+
+2011-09-13  Alexey Melnikov <alexey.melnikov@isode.com>
+	* configure.in, config/ltconfig, config/ltmain.sh:
+	  MacOS X related build fixes: use .plugin when building
+	  SASL plugins, fixed version number calculation,
+	  don't generate multiple symlinks.
+	  Also use LD_RUN_PATH as rpath. (patches by Chris Ridd)
+
+2011-09-12  Alexey Melnikov <alexey.melnikov@isode.com>
+	* win32/common.mak: Add _CRT_SECURE_NO_DEPRECATE define
+	to suppress warnings about use of strdup, snprintf, etc.
+
+2011-09-12  Alexey Melnikov <alexey.melnikov@isode.com>
+	* sasldb/db_berkeley.c:
+	  Fixed warnings about incompatible callback types.
+
+2011-09-12  Alexey Melnikov <alexey.melnikov@isode.com>
+	* lib/NTMakefile plugins/NTMakefile:
+	  Make sure that copied .c files are only rebuilt when changed.
+
 2011-09-07  Ken Murchison <murch@andrew.cmu.edu>
 	* plugins/scram.c:
-	  Fixed 3 memory leaks in SCRAM
+	  Fixed 3 memory leaks in SCRAM. Final 2.1.25.
 
 2011-09-07  Alexey Melnikov <alexey.melnikov@isode.com>
 	* configure.in, plugins/NTMakefile, plugins/cram.c:
 	  Allow use of cmusaslsecretCRAM-MD5 property to be disabled.
 
 2011-09-02  Alexey Melnikov <alexey.melnikov@isode.com>
-	* config/config.guess, config/config.sub, saslauthd/config/config.guess,
-	  saslauthd/config/config.sub: Updated config to the latest GNU snapshot.
+	* config/config.guess, config/config.sub,
+	  saslauthd/config/config.guess, saslauthd/config/config.sub:
+	  Updated config to the latest GNU snapshot.
 
 2011-09-01  Alexey Melnikov <alexey.melnikov@isode.com>
 	* lib/server.c: Make sure that a failed authorization doesn't preclude

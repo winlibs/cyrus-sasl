@@ -1,4 +1,4 @@
-/* $Id: client.c,v 1.8 2010/12/01 14:51:53 mel Exp $ */
+/* $Id: client.c,v 1.9 2011/09/15 09:31:49 mel Exp $ */
 /* 
  * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
  *
@@ -60,6 +60,7 @@
 #include <assert.h>
 
 #include <sasl.h>
+#include <saslplug.h>
 
 #include "common.h"
 
@@ -173,7 +174,7 @@ getsecret(sasl_conn_t *conn,
     }
 
     x->len = len;
-    strcpy(x->data, password);
+    strcpy((char *)x->data, password);
     memset(password, 0, len);
     
     *psecret = x;
@@ -184,13 +185,13 @@ getsecret(sasl_conn_t *conn,
 /* callbacks we support */
 static sasl_callback_t callbacks[] = {
   {
-    SASL_CB_GETREALM, &getrealm, NULL
+    SASL_CB_GETREALM, (sasl_callback_ft)&getrealm, NULL
   }, {
-    SASL_CB_USER, &simple, NULL
+    SASL_CB_USER, (sasl_callback_ft)&simple, NULL
   }, {
-    SASL_CB_AUTHNAME, &simple, NULL
+    SASL_CB_AUTHNAME, (sasl_callback_ft)&simple, NULL
   }, {
-    SASL_CB_PASS, &getsecret, NULL
+    SASL_CB_PASS, (sasl_callback_ft)&getsecret, NULL
   }, {
     SASL_CB_LIST_END, NULL, NULL
   }
@@ -254,7 +255,7 @@ int mysasl_negotiate(FILE *in, FILE *out, sasl_conn_t *conn)
 	mech = buf;
     }
 
-    r = sasl_client_start(conn, mech, NULL, &data, &len, &chosenmech);
+    r = sasl_client_start(conn, mech, NULL, &data, (unsigned int *) &len, &chosenmech);
     if (r != SASL_OK && r != SASL_CONTINUE) {
 	saslerr(r, "starting SASL negotiation");
 	printf("\n%s\n", sasl_errdetail(conn));
@@ -294,7 +295,7 @@ int mysasl_negotiate(FILE *in, FILE *out, sasl_conn_t *conn)
 	}
 	len = recv_string(in, buf, sizeof buf);
 
-	r = sasl_client_step(conn, buf, len, NULL, &data, &len);
+	r = sasl_client_step(conn, buf, len, NULL, &data, (unsigned int *) &len);
 	if (r != SASL_OK && r != SASL_CONTINUE) {
 	    saslerr(r, "performing SASL negotiation");
 	    printf("\n%s\n", sasl_errdetail(conn));
@@ -388,7 +389,7 @@ int main(int argc, char *argv[])
 
     /* set ip addresses */
     salen = sizeof(local_ip);
-    if (getsockname(fd, (struct sockaddr *)&local_ip, &salen) < 0) {
+    if (getsockname(fd, (struct sockaddr *)&local_ip, (unsigned int*) &salen) < 0) {
 	perror("getsockname");
     }
 
@@ -407,7 +408,7 @@ int main(int argc, char *argv[])
     snprintf(localaddr, sizeof(localaddr), "%s;%s", hbuf, pbuf);
 
     salen = sizeof(remote_ip);
-    if (getpeername(fd, (struct sockaddr *)&remote_ip, &salen) < 0) {
+    if (getpeername(fd, (struct sockaddr *)&remote_ip, (unsigned int *) &salen) < 0) {
 	perror("getpeername");
     }
 
@@ -432,8 +433,8 @@ int main(int argc, char *argv[])
     if (cb_flag) {
         cb.name = "sasl-sample";
         cb.critical = cb_flag > 1;
-        cb.data = "this is a test of channel binding";
-        cb.len = strlen(cb.data);
+        cb.data = (unsigned char *) "this is a test of channel binding";
+        cb.len = (unsigned int) strlen((const char *) cb.data);
 
         sasl_setprop(conn, SASL_CHANNEL_BINDING, &cb);
     }

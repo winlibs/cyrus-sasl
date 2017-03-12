@@ -1,0 +1,6 @@
+Makefile.in
+Makefile
+.deps
+.libs
+*.l[ao]
+*_init.c

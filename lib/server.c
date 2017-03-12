@@ -1,7 +1,7 @@
 /* SASL server API implementation
  * Rob Siemborski
  * Tim Martin
- * $Id: server.c,v 1.176 2011/09/01 16:33:10 mel Exp $
+ * $Id: server.c,v 1.177 2011/11/08 17:22:40 murch Exp $
  */
 /* 
  * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
@@ -90,7 +90,7 @@ static int _sasl_checkpass(sasl_conn_t *conn,
 
 static mech_list_t *mechlist = NULL; /* global var which holds the list */
 
-sasl_global_callbacks_t global_callbacks;
+static sasl_global_callbacks_t global_callbacks;
 
 /* set the password for a user
  *  conn        -- SASL connection
@@ -440,7 +440,8 @@ int sasl_server_add_plugin(const char *plugname,
     if ((result != SASL_OK) && (result != SASL_NOUSER)
         && (result != SASL_CONTINUE)) {
 	_sasl_log(NULL, SASL_LOG_DEBUG,
-		  "server add_plugin entry_point error %z\n", result);
+		  "%s_client_plug_init() failed in sasl_server_add_plugin(): %z\n",
+		  plugname, result);
 	return result;
     }
 
@@ -449,7 +450,8 @@ int sasl_server_add_plugin(const char *plugname,
     {
 	_sasl_log(NULL,
 		  SASL_LOG_ERR,
-		  "version mismatch on plugin: %d expected, but %d reported",
+		  "version mismatch on  sasl_server_add_plugin for '%s': %d expected, but %d reported",
+		  plugname,
 		  SASL_SERVER_PLUG_VERSION,
 		  version);
 	return SASL_BADVERS;
@@ -564,6 +566,8 @@ static int server_done(void) {
   global_callbacks.callbacks = NULL;
   global_callbacks.appname = NULL;
 
+  sasl_config_done();
+
   return SASL_OK;
 }
 
@@ -646,7 +650,7 @@ static int load_config(const sasl_callback_t *verifyfile_cb)
             goto done;
         }
 
-        snprintf(config_filename, len, "%.*s%c%s.conf", path_len, path_to_config, 
+        snprintf(config_filename, len, "%.*s%c%s.conf", (int)path_len, path_to_config,
 	        HIER_DELIMITER, global_callbacks.appname);
 
         /* Ask the application if it's safe to use this file */

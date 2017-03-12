@@ -169,16 +169,20 @@ static int lak_config_read(
 				*p = tolower(*p);
 			p++;
 		}
-		if (*p != ':')
+		if (*p != ':') {
+			fclose(infile);
 			return LAK_FAIL;
+		}
 		
 		*p++ = '\0';
 
 		while (*p && isspace((int) *p)) 
 			p++;
 
-		if (!*p)
+		if (!*p) {
+			fclose(infile);
 			return LAK_FAIL;
+		}
 
 		if (!strcasecmp(key, "ldap_servers"))
 			strlcpy(conf->servers, p, LAK_URL_LEN);
@@ -831,7 +835,12 @@ static int lak_connect(
 
 	rc = ldap_set_option(lak->ld, LDAP_OPT_NETWORK_TIMEOUT, &(lak->conf->timeout));
 	if (rc != LDAP_OPT_SUCCESS) {
-		syslog(LOG_WARNING|LOG_AUTH, "Unable to set LDAP_OPT_NETWORK_TIMEOUT %d.%d.", lak->conf->timeout.tv_sec, lak->conf->timeout.tv_usec);
+		syslog(LOG_WARNING|LOG_AUTH, "Unable to set LDAP_OPT_NETWORK_TIMEOUT %ld.%ld.", lak->conf->timeout.tv_sec, lak->conf->timeout.tv_usec);
+	}
+
+	rc = ldap_set_option(lak->ld, LDAP_OPT_TIMEOUT, &(lak->conf->timeout));
+	if (rc != LDAP_OPT_SUCCESS) {
+		syslog(LOG_WARNING|LOG_AUTH, "Unable to set LDAP_OPT_TIMEOUT %ld.%ld.", lak->conf->timeout.tv_sec, lak->conf->timeout.tv_usec);
 	}
 
 	rc = ldap_set_option(lak->ld, LDAP_OPT_TIMELIMIT, &(lak->conf->time_limit));
@@ -1369,8 +1378,8 @@ static int lak_group_member(
     }
 
 done:;
-	if (res)
-		ldap_msgfree(res);
+    if (res)
+        ldap_msgfree(res);
     if (group_dn)
         free(group_dn);
     if (group_filter)
@@ -1382,7 +1391,7 @@ done:;
     if (dn_bv)
         ber_bvfree(dn_bv);
 
-	return rc;
+    return rc;
 }
 
 static int lak_auth_custom(
@@ -1703,6 +1712,21 @@ static int lak_check_password(
 
 #ifdef HAVE_OPENSSL
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#define EVP_MD_CTX_new()      EVP_MD_CTX_create()
+#define EVP_MD_CTX_free(ctx)  EVP_MD_CTX_destroy((ctx))
+
+static EVP_ENCODE_CTX *EVP_ENCODE_CTX_new(void)
+{
+	return OPENSSL_zalloc(sizeof(EVP_ENCODE_CTX));
+}
+
+static void EVP_ENCODE_CTX_free(EVP_ENCODE_CTX *ctx)
+{
+	OPENSSL_free(ctx);
+}
+#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+
 static int lak_base64_decode(
 	const char *src,
 	char **ret,
@@ -1711,20 +1735,28 @@ static int lak_base64_decode(
 
 	int rc, i, tlen = 0;
 	char *text;
-	EVP_ENCODE_CTX EVP_ctx;
+	EVP_ENCODE_CTX *enc_ctx = EVP_ENCODE_CTX_new();
 
-	text = (char *)malloc(((strlen(src)+3)/4 * 3) + 1);
-	if (text == NULL)
+	if (enc_ctx == NULL)
 		return LAK_NOMEM;
 
-	EVP_DecodeInit(&EVP_ctx);
-	rc = EVP_DecodeUpdate(&EVP_ctx, text, &i, (char *)src, strlen(src));
+	text = (char *)malloc(((strlen(src)+3)/4 * 3) + 1);
+	if (text == NULL) {
+		EVP_ENCODE_CTX_free(enc_ctx);
+		return LAK_NOMEM;
+	}
+
+	EVP_DecodeInit(enc_ctx);
+	rc = EVP_DecodeUpdate(enc_ctx, (unsigned char *) text, &i, (const unsigned char *)src, strlen(src));
 	if (rc < 0) {
+		EVP_ENCODE_CTX_free(enc_ctx);
 		free(text);
 		return LAK_FAIL;
 	}
 	tlen += i;
-	EVP_DecodeFinal(&EVP_ctx, text, &i); 
+	EVP_DecodeFinal(enc_ctx, (unsigned char *) text, &i);
+
+	EVP_ENCODE_CTX_free(enc_ctx);
 
 	*ret = text;
 	if (rlen != NULL)
@@ -1740,7 +1772,7 @@ static int lak_check_hashed(
 {
 	int rc, clen;
 	LAK_HASH_ROCK *hrock = (LAK_HASH_ROCK *) rock;
-	EVP_MD_CTX mdctx;
+	EVP_MD_CTX *mdctx;
 	const EVP_MD *md;
 	unsigned char digest[EVP_MAX_MD_SIZE];
 	char *cred;
@@ -1749,17 +1781,24 @@ static int lak_check_hashed(
 	if (!md)
 		return LAK_FAIL;
 
-	rc = lak_base64_decode(hash, &cred, &clen);
-	if (rc != LAK_OK)
-		return rc;
+	mdctx = EVP_MD_CTX_new();
+	if (!mdctx)
+		return LAK_NOMEM;
 
-	EVP_DigestInit(&mdctx, md);
-	EVP_DigestUpdate(&mdctx, passwd, strlen(passwd));
+	rc = lak_base64_decode(hash, &cred, &clen);
+	if (rc != LAK_OK) {
+		EVP_MD_CTX_free(mdctx);
+		return rc;
+	}
+
+	EVP_DigestInit(mdctx, md);
+	EVP_DigestUpdate(mdctx, passwd, strlen(passwd));
 	if (hrock->salted) {
-		EVP_DigestUpdate(&mdctx, &cred[EVP_MD_size(md)],
+		EVP_DigestUpdate(mdctx, &cred[EVP_MD_size(md)],
 				 clen - EVP_MD_size(md));
 	}
-	EVP_DigestFinal(&mdctx, digest, NULL);
+	EVP_DigestFinal(mdctx, digest, NULL);
+	EVP_MD_CTX_free(mdctx);
 
 	rc = memcmp((char *)cred, (char *)digest, EVP_MD_size(md));
 	free(cred);

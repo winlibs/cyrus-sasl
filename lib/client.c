@@ -60,7 +60,7 @@
 #include "saslint.h"
 
 static cmech_list_t *cmechlist; /* global var which holds the list */
-sasl_global_callbacks_t global_callbacks_client; 
+static sasl_global_callbacks_t global_callbacks_client;
 static int _sasl_client_active = 0;
 
 static int init_mechlist()
@@ -195,8 +195,8 @@ int sasl_client_add_plugin(const char *plugname,
     if (result != SASL_OK)
     {
 	_sasl_log(NULL, SASL_LOG_WARN,
-	      "entry_point failed in sasl_client_add_plugin for %s",
-	      plugname);
+		  "sasl_client_add_plugin(): entry_point(): failed for plugname %s: %z",
+		  plugname, result);
 	return result;
     }
 
@@ -658,6 +658,20 @@ _sasl_cbinding_disp(sasl_client_params_t *cparams,
     return SASL_OK;
 }
 
+static int
+_sasl_are_current_security_flags_worse_then_best(unsigned best_security_flags,
+						 unsigned current_security_flags)
+{
+    /* We don't qualify SASL_SEC_PASS_CREDENTIALS as "secure" flag */
+    best_security_flags &= ~SASL_SEC_PASS_CREDENTIALS;
+
+    if ((current_security_flags ^ best_security_flags) & best_security_flags) {
+	return 1;
+    } else {
+	return 0;
+    }
+}
+
 /* select a mechanism for a connection
  *  mechlist      -- mechanisms server has available (punctuation ignored)
  *  secret        -- optional secret from previous session
@@ -752,7 +766,8 @@ int sasl_client_start(sasl_conn_t *conn,
 
 	/* for each mechanism in client's list */
 	for (m = c_conn->mech_list; m != NULL; m = m->next) {
-	    int myflags, plus;
+	    unsigned myflags;
+	    int plus;
 
 	    if (!_sasl_is_equal_mech(name, m->m.plug->mech_name, name_len, &plus)) {
 		continue;
@@ -766,15 +781,17 @@ int sasl_client_start(sasl_conn_t *conn,
 	    if (minssf > m->m.plug->max_ssf)
 		break;
 
-	    /* Does it meet our security properties? */
 	    myflags = conn->props.security_flags;
-	    
-	    /* if there's an external layer this is no longer plaintext */
+
+	    /* if there's an external layer with a better SSF then this is no
+	     * longer considered a plaintext mechanism
+	     */
 	    if ((conn->props.min_ssf <= conn->external.ssf) && 
 		(conn->external.ssf > 1)) {
 		myflags &= ~SASL_SEC_NOPLAINTEXT;
 	    }
 
+	    /* Does it meet our security properties? */
 	    if (((myflags ^ m->m.plug->security_flags) & myflags) != 0) {
 		break;
 	    }
@@ -820,8 +837,9 @@ int sasl_client_start(sasl_conn_t *conn,
 	     */
 
 	    if (bestm &&
-		((m->m.plug->security_flags ^ bestm->m.plug->security_flags) &
-		 bestm->m.plug->security_flags)) {
+		_sasl_are_current_security_flags_worse_then_best(
+		    bestm->m.plug->security_flags,
+		    m->m.plug->security_flags)) {
 		break;
 	    }
 

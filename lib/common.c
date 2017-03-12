@@ -1,7 +1,7 @@
 /* common.c - Functions that are common to server and clinet
  * Rob Siemborski
  * Tim Martin
- * $Id: common.c,v 1.133 2011/09/01 14:12:53 mel Exp $
+ * $Id: common.c,v 1.134 2011/09/22 14:40:30 mel Exp $
  */
 /* 
  * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
@@ -89,7 +89,7 @@ static char * _sasl_get_default_win_path(void *context __attribute__((unused)),
 static const char build_ident[] = "$Build: libsasl " PACKAGE "-" VERSION " $";
 
 /* It turns out to be convenient to have a shared sasl_utils_t */
-LIBSASL_VAR const sasl_utils_t *sasl_global_utils = NULL;
+const sasl_utils_t *sasl_global_utils = NULL;
 
 /* Should be a null-terminated array that lists the available mechanisms */
 static char **global_mech_list = NULL;
@@ -842,7 +842,11 @@ void sasl_dispose(sasl_conn_t **pconn)
   if (result!=SASL_OK) return;
   
   /* *pconn might have become NULL by now */
-  if (! (*pconn)) return;
+  if (! (*pconn))
+  {
+	sasl_MUTEX_UNLOCK(free_mutex);
+	return;
+  }
 
   (*pconn)->destroy_conn(*pconn);
   sasl_FREE(*pconn);
@@ -1041,10 +1045,10 @@ int sasl_getprop(sasl_conn_t *conn, int propnum, const void **pvalue)
       break;
   case SASL_GSS_CREDS:
       if(conn->type == SASL_CONN_CLIENT)
-	  *(void **)pvalue = 
+	  *(const void **)pvalue = 
               ((sasl_client_conn_t *)conn)->cparams->gss_creds;
       else
-	  *(void **)pvalue = 
+	  *(const void **)pvalue = 
               ((sasl_server_conn_t *)conn)->sparams->gss_creds;
       break;
   case SASL_HTTP_REQUEST: {
@@ -1358,6 +1362,7 @@ const char *sasl_errstring(int saslerr,
     case SASL_CONSTRAINT_VIOLAT: return "sasl_setpass can't store a property because "
 			        "of a constraint violation";
     case SASL_BADBINDING: return "channel binding failure";
+    case SASL_CONFIGERR:  return "error when parsing configuration file";
 
     default:   return "undefined error!";
     }
@@ -1521,11 +1526,8 @@ _sasl_getsimple(void *context,
 		size_t *len)
 {
   const char *userid;
-  sasl_conn_t *conn;
 
   if (! context || ! result) return SASL_BADPARAM;
-
-  conn = (sasl_conn_t *)context;
 
   switch(id) {
   case SASL_CB_AUTHNAME:
@@ -2422,6 +2424,11 @@ int _sasl_is_equal_mech(const char *req_mech,
     } else {
         n = req_mech_len;
         *plus = 0;
+    }
+
+    if (n < strlen(plug_mech)) {
+	/* Don't allow arbitrary prefix match */
+	return 0;
     }
 
     return (strncasecmp(req_mech, plug_mech, n) == 0);

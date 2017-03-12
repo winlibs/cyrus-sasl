@@ -94,7 +94,7 @@ static void sockaddr_unmapped(
     if (!IN6_IS_ADDR_V4MAPPED((&sin6->sin6_addr)))
 	return;
     sin4 = (struct sockaddr_in *)sa;
-    addr = *(uint32_t *)&sin6->sin6_addr.s6_addr[12];
+    addr = *(uint32_t *)&sin6->sin6_addr.s6_addr32[3];
     port = sin6->sin6_port;
     memset(sin4, 0, sizeof(struct sockaddr_in));
     sin4->sin_addr.s_addr = addr;
@@ -152,7 +152,7 @@ int _plug_ipfromstring(const sasl_utils_t *utils, const char *addr,
 	return SASL_BADPARAM;
     }
 
-    len = ai->ai_addrlen;
+    len = (socklen_t) ai->ai_addrlen;
     memcpy(&ss, ai->ai_addr, len);
     freeaddrinfo(ai);
     sockaddr_unmapped((struct sockaddr *)&ss, &len);
@@ -230,7 +230,7 @@ int _plug_buf_alloc(const sasl_utils_t *utils, char **rwbuf,
 	}
 	*curlen = newlen;
     } else if(*rwbuf && *curlen < newlen) {
-	size_t needed = 2*(*curlen);
+	unsigned needed = 2*(*curlen);
 
 	while(needed < newlen)
 	    needed *= 2;
@@ -267,7 +267,7 @@ int _plug_strdup(const sasl_utils_t * utils, const char *in,
   strcpy((char *) *out, in);
 
   if (outlen)
-      *outlen = len;
+      *outlen = (int) len;
 
   return SASL_OK;
 }
@@ -280,7 +280,7 @@ void _plug_free_string(const sasl_utils_t *utils, char **str)
 
   len = strlen(*str);
 
-  utils->erasebuffer(*str, len);
+  utils->erasebuffer(*str, (unsigned int) len);
   utils->free(*str);
 
   *str=NULL;
@@ -334,7 +334,7 @@ int _plug_get_simple(const sasl_utils_t *utils, unsigned int id, int required,
 	/* We prompted, and got.*/
 	
 	if (required && !prompt->result) {
-	    SETERROR(utils, "Unexpectedly missing a prompt result");
+	    SETERROR(utils, "Unexpectedly missing a prompt result in _plug_get_simple");
 	    return SASL_BADPARAM;
 	}
 
@@ -382,7 +382,7 @@ int _plug_get_password(const sasl_utils_t *utils, sasl_secret_t **password,
 	/* We prompted, and got.*/
 	
 	if (!prompt->result) {
-	    SETERROR(utils, "Unexpectedly missing a prompt result");
+	    SETERROR(utils, "Unexpectedly missing a prompt result in _plug_get_password");
 	    return SASL_BADPARAM;
 	}
       
@@ -441,7 +441,7 @@ int _plug_challenge_prompt(const sasl_utils_t *utils, unsigned int id,
 	/* We prompted, and got.*/
 	
 	if (!prompt->result) {
-	    SETERROR(utils, "Unexpectedly missing a prompt result");
+	    SETERROR(utils, "Unexpectedly missing a prompt result in _plug_challenge_prompt");
 	    return SASL_BADPARAM;
 	}
       
@@ -487,7 +487,7 @@ int _plug_get_realm(const sasl_utils_t *utils, const char **availrealms,
 	/* We prompted, and got.*/
 	
 	if (!prompt->result) {
-	    SETERROR(utils, "Unexpectedly missing a prompt result");
+	    SETERROR(utils, "Unexpectedly missing a prompt result in _plug_get_realm");
 	    return SASL_BADPARAM;
 	}
 

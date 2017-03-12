@@ -198,7 +198,7 @@ typedef struct reauth_entry {
 
 	    /* for HTTP mode (RFC 2617) only */
 	    char *algorithm;
-	    unsigned char *opaque;	
+	    unsigned char *opaque;
 	} c; /* client stuff */
     } u;
 } reauth_entry_t;
@@ -1899,12 +1899,6 @@ static int digestmd5_server_mech_new(void *glob_context,
 {
     context_t *text;
     
-    if ((sparams->flags & SASL_NEED_HTTP) && !sparams->http_request) {
-	SETERROR(sparams->utils,
-		 "DIGEST-MD5 unavailable due to lack of HTTP request");
-	return SASL_BADPARAM;
-    }
-
     /* holds state are in -- allocate server size */
     text = sparams->utils->malloc(sizeof(server_context_t));
     if (text == NULL)
@@ -2118,7 +2112,7 @@ digestmd5_server_mech_step1(server_context_t *stext,
 	return SASL_FAIL;
     }
 
-    if (text->http_mode && sparams->http_request->non_persist &&
+    if (text->http_mode && text->reauth->timeout &&
 	sparams->utils->mutex_lock(text->reauth->mutex) == SASL_OK) { /* LOCK */
 
 	/* Create an initial cache entry for non-persistent HTTP connections */
@@ -2213,6 +2207,12 @@ static int digestmd5_server_mech_step2(server_context_t *stext,
     if (text->http_mode) {
 	/* per RFC 2617 (HTTP Request as set by calling application) */
 	request = sparams->http_request;
+	if (!request) {
+	    SETERROR(sparams->utils,
+		     "missing HTTP request in DIGEST-MD5, step 2");
+	    result = SASL_BADPARAM;
+	    goto FreeAllMem;
+	}
     }
     else {
 	/* per RFC 2831 */
@@ -2434,7 +2434,24 @@ static int digestmd5_server_mech_step2(server_context_t *stext,
 	goto FreeAllMem;
     }
 
-    if (text->state == 1) {
+    if (realm == NULL) {
+        /* From 2831bis:
+           If the directive is missing, "realm-value" will set to
+           the empty string when computing A1. */
+	_plug_strdup(sparams->utils, "", &realm, NULL);
+	sparams->utils->log(sparams->utils->conn, SASL_LOG_DEBUG,
+			"The client didn't send a realm, assuming empty string.");
+#if 0
+        if (text->realm[0] != '\0') {
+            SETERROR(sparams->utils,
+		 "realm changed: authentication aborted");
+            result = SASL_BADAUTH;
+            goto FreeAllMem;
+        }
+#endif
+    }
+
+    if (!text->nonce && text->reauth->timeout) {
 	unsigned val = hash((char *) nonce) % text->reauth->size;
 
 	/* reauth attempt or continuation of HTTP Digest on a
@@ -2462,66 +2479,60 @@ static int digestmd5_server_mech_step2(server_context_t *stext,
 	}
 
 	if (!text->nonce) {
-	    /* we don't have any reauth info, so bail */
+	    /* we don't have any reauth info */
 	    sparams->utils->log(sparams->utils->conn, SASL_LOG_DEBUG,
 				"No reauth info for '%s' found", nonce);
-	    result = SASL_FAIL;
-	    goto FreeAllMem;
+
+	    /* we will continue processing the response to determine
+	       if the client knows the password and return stale accordingly */
 	}
     }
 
     /* Sanity check the parameters */
-    if (realm == NULL) {
-        /* From 2831bis:
-           If the directive is missing, "realm-value" will set to
-           the empty string when computing A1. */
-	_plug_strdup(sparams->utils, "", &realm, NULL);
-	sparams->utils->log(sparams->utils->conn, SASL_LOG_DEBUG,
-			"The client didn't send a realm, assuming empty string.");
-        if (text->realm[0] != '\0') {
-            SETERROR(sparams->utils,
-		 "realm changed: authentication aborted");
-            result = SASL_BADAUTH;
-            goto FreeAllMem;
-        }
+    if (text->nonce) {
+	/* CLAIM: realm is not NULL below */
+	if (text->realm == NULL) {
+	    sparams->utils->log(sparams->utils->conn, SASL_LOG_DEBUG,
+				"The client specifies a realm when the server hasn't provided one. Using client's realm.");
+	    _plug_strdup(sparams->utils, realm, &text->realm, NULL);
+	} else if ((strcmp(realm, text->realm) != 0) &&
+		   /* XXX - Not sure why the check for text->realm not being empty is needed,
+		      as it should always be non-empty */
+		   (text->realm[0] != 0)) {
 
-    /* CLAIM: realm is not NULL below */
-    } else if (text->realm == NULL) {
-	sparams->utils->log(sparams->utils->conn, SASL_LOG_DEBUG,
-			"The client specifies a realm when the server hasn't provided one. Using client's realm.");
-	_plug_strdup(sparams->utils, realm, &text->realm, NULL);
-    } else if ((strcmp(realm, text->realm) != 0) &&
-	    /* XXX - Not sure why the check for text->realm not being empty is needed,
-	       as it should always be non-empty */
-	       (text->realm[0] != 0)) {
+	    client_ignores_realm = 1;
+	    sparams->utils->log(sparams->utils->conn, SASL_LOG_DEBUG,
+				"The client tries to override server provided realm");
+	    if (text->realm) sparams->utils->free(text->realm);
+	    _plug_strdup(sparams->utils, realm, &text->realm, NULL);
+	}
 
-	client_ignores_realm = 1;
-	sparams->utils->log(sparams->utils->conn, SASL_LOG_DEBUG,
-			"The client tries to override server provided realm");
-	if (text->realm) sparams->utils->free(text->realm);
-	_plug_strdup(sparams->utils, realm, &text->realm, NULL);
-    }
-    if (strcmp((char *) nonce, (char *) text->nonce) != 0) {
-	SETERROR(sparams->utils,
-		 "nonce changed: authentication aborted");
-	result = SASL_BADAUTH;
-	goto FreeAllMem;
-    }
-    if (noncecount != text->nonce_count) {
-	SETERROR(sparams->utils,
-		 "incorrect nonce-count: authentication aborted");
-	result = SASL_BADAUTH;
-	goto FreeAllMem;
-    }
-#if 0  /* XXX  Neither RFC 2617 nor RFC 2831 state that the cnonce
-	  needs to remain constant for subsequent authentication to work */
-    if (text->cnonce && strcmp((char *) cnonce, (char *) text->cnonce) != 0) {
-	SETERROR(sparams->utils,
-		 "cnonce changed: authentication aborted");
-	result = SASL_BADAUTH;
-	goto FreeAllMem;
-    }
+	if (strcmp((char *) nonce, (char *) text->nonce) != 0) {
+	    SETERROR(sparams->utils,
+		     "nonce changed: authentication aborted");
+	    result = SASL_BADAUTH;
+	    goto FreeAllMem;
+	}
+#if 0	/* XXX  Possible replay attack, but we will continue processing
+	 * the response to determine if the client knows the password and
+	 return stale accordingly */
+	if (noncecount != text->nonce_count) {
+	    SETERROR(sparams->utils,
+		     "incorrect nonce-count: authentication aborted");
+	    result = SASL_BADAUTH;
+	    goto FreeAllMem;
+	}
 #endif
+#if 0	/* XXX  Neither RFC 2617 nor RFC 2831 state that the cnonce
+	   needs to remain constant for subsequent authentication to work */
+	if (text->cnonce && strcmp((char *) cnonce, (char *) text->cnonce) != 0) {
+	    SETERROR(sparams->utils,
+		     "cnonce changed: authentication aborted");
+	    result = SASL_BADAUTH;
+	    goto FreeAllMem;
+	}
+#endif
+    }
 	    
     result = sparams->utils->prop_request(sparams->propctx, password_request);
     if(result != SASL_OK) {
@@ -2620,7 +2631,7 @@ static int digestmd5_server_mech_step2(server_context_t *stext,
 	    
 	    Try_8859_1 = DigestCalcSecret(sparams->utils,
 					  (unsigned char *) username,
-					  (unsigned char *) text->realm,
+					  (unsigned char *) realm,
 					  sec->data,
 					  sec->len,
 					  FALSE,
@@ -2636,7 +2647,7 @@ static int digestmd5_server_mech_step2(server_context_t *stext,
 	    
 	    DigestCalcSecret(sparams->utils,
 			     (unsigned char *) username,
-			     (unsigned char *) text->realm,
+			     (unsigned char *) realm,
 			     sec->data,
 			     sec->len,
 			     TRUE,
@@ -2729,8 +2740,8 @@ static int digestmd5_server_mech_step2(server_context_t *stext,
     
     serverresponse = create_response(text,
 				     sparams->utils,
-				     text->nonce,
-				     text->nonce_count,
+				     nonce,
+				     noncecount,
 				     cnonce,
 				     qop,
 				     request,
@@ -2747,11 +2758,11 @@ static int digestmd5_server_mech_step2(server_context_t *stext,
     /* if ok verified */
     if (strcmp(serverresponse, response) != 0) {
 	if (Try_8859_1) {
-	    
+            sparams->utils->free(serverresponse);
 	    serverresponse = create_response(text,
 					     sparams->utils,
-					     text->nonce,
-					     text->nonce_count,
+					     nonce,
+					     noncecount,
 					     cnonce,
 					     qop,
 					     request,
@@ -2784,14 +2795,19 @@ static int digestmd5_server_mech_step2(server_context_t *stext,
     }
 
     /* see if our nonce expired */
-    if (text->reauth->timeout &&
-	time(0) - stext->timestamp > text->reauth->timeout) {
-	SETERROR(sparams->utils, "server nonce expired");
+    if (!text->nonce ||
+	(noncecount != text->nonce_count) ||
+	(text->reauth->timeout &&
+	 time(0) - stext->timestamp > text->reauth->timeout)) {
+	if (!text->nonce) SETERROR(sparams->utils, "no cached server nonce");
+	else if (noncecount != text->nonce_count)
+	    SETERROR(sparams->utils, "incorrect nonce-count");
+	else SETERROR(sparams->utils, "server nonce expired");
 	stext->stale = 1;
 	result = SASL_BADAUTH;
 
 	goto FreeAllMem;
-     }
+    }
 
     /*
      * nothing more to do; authenticated set oparams information
@@ -3030,6 +3046,10 @@ static int digestmd5_server_mech_step(void *conn_context,
 
 	    /* re-initialize everything for a fresh start */
 	    memset(oparams, 0, sizeof(sasl_out_params_t));
+	    if (text->nonce) sparams->utils->free(text->nonce);
+	    if (text->realm) sparams->utils->free(text->realm);
+	    text->realm = NULL;
+	    text->nonce = NULL;
 
 	    /* fall through and issue challenge */
 	}
@@ -3445,6 +3465,7 @@ static int make_client_response(context_t *text,
     
     
     resplen = 0;
+    if (text->out_buf) params->utils->free(text->out_buf);
     text->out_buf = NULL;
     text->out_buf_len = 0;
     if (add_to_challenge(params->utils,
@@ -3630,7 +3651,6 @@ static int parse_server_challenge(client_context_t *ctext,
     int saw_qop = 0;
     int ciphers = 0;
     int maxbuf_count = 0;
-    bool IsUTF8 = FALSE;
     int algorithm_count = 0;
     int opaque_count = 0;
 
@@ -3847,8 +3867,6 @@ SKIP_SPACES_IN_CIPHER:
 		params->utils->seterror(params->utils->conn, 0,
 					"Charset must be UTF-8");
 		goto FreeAllocatedMem;
-	    } else {
-		IsUTF8 = TRUE;
 	    }
 	} else if (strcasecmp(name,"algorithm")==0) {
 	    if (text->http_mode && strcasecmp(value, "md5") == 0) {
@@ -4279,7 +4297,7 @@ digestmd5_client_mech_step1(client_context_t *ctext,
     *clientoutlen = (unsigned) strlen(text->out_buf);
     *clientout = text->out_buf;
 
-    text->state = 3;
+    /* check for next state (2 or 3) is done in digestmd5_client_mech_step() */
     return SASL_CONTINUE;
 }
 
@@ -4312,6 +4330,7 @@ static int digestmd5_client_mech_step2(client_context_t *ctext,
     
 	if (nrealm == 1) {
 	    /* only one choice! */
+	    if (text->realm) params->utils->free(text->realm);
 	    text->realm = realms[0];
 
 	    /* free realms */
@@ -4505,16 +4524,10 @@ static int digestmd5_client_mech_step(void *conn_context,
 		return SASL_CONTINUE;
 	    }
 	}
-	
-	/* fall through and respond to challenge */
-	
-    case 3:
-	if (serverin && !strncasecmp(serverin, "rspauth=", 8)) {
-	    return digestmd5_client_mech_step3(ctext, params,
-					       serverin, serverinlen,
-					       prompt_need,
-					       clientout, clientoutlen,
-					       oparams);
+	else if (!strncasecmp(serverin, "rspauth=", 8)) {
+	    /* server accepted fast reauth */
+	    text->state = 3;
+	    goto step3;
 	}
 
 	/* fall through and respond to challenge */
@@ -4541,6 +4554,14 @@ static int digestmd5_client_mech_step(void *conn_context,
 					   clientout, clientoutlen,
 					   oparams);
 
+    case 3:
+    step3:
+	return digestmd5_client_mech_step3(ctext, params,
+					   serverin, serverinlen,
+					   prompt_need,
+					   clientout, clientoutlen,
+					   oparams);
+
     default:
 	params->utils->log(NULL, SASL_LOG_ERR,
 			   "Invalid DIGEST-MD5 client step %d\n", text->state);
@@ -4561,6 +4582,8 @@ static void digestmd5_client_mech_dispose(void *conn_context,
 	       "DIGEST-MD5 client mech dispose");
 
     if (ctext->free_password) _plug_free_secret(utils, &ctext->password);
+    if (ctext->algorithm) utils->free(ctext->algorithm);
+    if (ctext->opaque) utils->free(ctext->opaque);
 
     digestmd5_common_mech_dispose(conn_context, utils);
 }
