@@ -26,7 +26,7 @@ LINK32EXE=$(LINK32)
 # It seems that -lib must be the first parameter
 LINK32LIB=link.exe /lib /nologo
 
-SYS_LIBS=ws2_32.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib
+SYS_LIBS=ws2_32.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib ntdll.lib
 
 !IF "$(BITS)" == "64"
 SYS_LIBS=$(SYS_LIBS) bufferoverflowU.lib
@@ -121,7 +121,7 @@ GSSAPI_LIBPATH="C:\Program Files\CyberSafe\Developer Pack\ApplicationSecuritySDK
 !ENDIF
 !ENDIF
 
-!IF "$(SQLITE_INCLUDE)" == ""
+!IF "$(SQLITE_INCLUDES)" == ""
 SQLITE_INCLUDES=/I"C:\work\open_source\sqllite\sqlite\src" /I"C:\work\open_source\sqllite\sqlite\win32"
 !IF "$(VERBOSE)" != "0"
 !MESSAGE Defaulting SQLITE_INCLUDES includes to $(SQLITE_INCLUDES).
@@ -135,7 +135,7 @@ SQLITE_LIBPATH="C:\work\open_source\sqllite\sqlite\objs"
 !ENDIF
 !ENDIF
 
-!IF "$(SQLITE_INCLUDE3)" == ""
+!IF "$(SQLITE_INCLUDES3)" == ""
 SQLITE_INCLUDES3=/I"c:\work\sqlite\generated"
 !IF "$(VERBOSE)" != "0"
 !MESSAGE Defaulting SQLITE_INCLUDES3 includes to $(SQLITE_INCLUDES3).
@@ -184,16 +184,16 @@ CODEGEN=/MD
 !ENDIF 
 
 !IF "$(VCVER)" != "6"
-ENABLE_WIN64_WARNINGS=/Wp64
+ENABLE_WIN64_WARNINGS=
 !ENDIF
 
-CPP_PROJ= $(CODEGEN) /W3 $(EXCEPTHANDLING) /O2 $(ENABLE_WIN64_WARNINGS) /Zi /D "NDEBUG" /D _CRT_SECURE_NO_DEPRECATE=1 $(CPPFLAGS) /FD /c
+CPP_PROJ= /guard:cf /Zc:inline /GF /GL /Gw $(CODEGEN) /W3 $(EXCEPTHANDLING) /Ox $(ENABLE_WIN64_WARNINGS) /Zi /D "NDEBUG" /D _CRT_SECURE_NO_DEPRECATE=1 $(CPPFLAGS) /FD /c
 
 incremental=no
 
 # This use to contain /machine:I386. This breaks cross compiling to Windows 64.
 # It doesn't seem that the /machine option is needed anyway.
-LINK32_FLAGS=/debug
+LINK32_FLAGS=/debug /GUARD:CF /opt:ref,icf /NXCOMPAT /DYNAMICBASE
 
 !ELSEIF  "$(CFG)" == "Debug"
 
