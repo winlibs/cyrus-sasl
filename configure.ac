@@ -42,7 +42,7 @@ dnl AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING
 dnl OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 dnl
 
-AC_PREREQ(2.63.2)
+AC_PREREQ(2.63)
 
 dnl
 dnl REMINDER: When changing the version number here, please also update
@@ -67,7 +67,7 @@ AC_CONFIG_AUX_DIR(config)
 AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
 
-AM_INIT_AUTOMAKE([1.11 tar-ustar dist-bzip2 -Wno-portability subdir-objects])
+AM_INIT_AUTOMAKE([1.11 tar-ustar dist-bzip2 foreign -Wno-portability subdir-objects])
 
 DIRS=""
 
@@ -80,6 +80,7 @@ AC_ARG_ENABLE(cmulocal,
 AC_ARG_ENABLE(sample,
               [AC_HELP_STRING([--enable-sample],
                               [compile sample code [[yes]]])],
+              [],
               enable_sample=yes)
 
 AC_ARG_ENABLE(obsolete_cram_attr,
@@ -87,6 +88,12 @@ AC_ARG_ENABLE(obsolete_cram_attr,
                               [enable support for cmusaslsecretCRAM-MD5 auxprop property [[yes]]])],
               enable_obsolete_cram_attr=$enableval,
               enable_obsolete_cram_attr=yes)
+
+AC_ARG_ENABLE(obsolete_digest_attr,
+              [AC_HELP_STRING([--enable-obsolete_digest_attr],
+                              [enable support for cmusaslsecretDIGEST-MD5 auxprop property [[yes]]])],
+              enable_obsolete_digest_attr=$enableval,
+              enable_obsolete_digest_attr=yes)
 
 AC_PROG_CC
 AX_PROG_CC_FOR_BUILD
@@ -96,7 +103,6 @@ AC_PROG_LN_S
 AC_PROG_MAKE_SET
 AC_PROG_INSTALL
 AC_USE_SYSTEM_EXTENSIONS
-CMU_C___ATTRIBUTE__
 
 dnl check for -R, etc. switch
 CMU_GUESS_RUNPATH_SWITCH
@@ -226,10 +232,10 @@ AC_SUBST(SASL_DL_LIB)
 
 dnl /dev/random ?
 
-AC_ARG_WITH(devrandom, [  --with-devrandom=PATH   set the path to /dev/random [[/dev/random]] ],
+AC_ARG_WITH(devrandom, [  --with-devrandom=PATH   set the path to pseudo random number generator [[/dev/urandom]] ],
   devrandom=$withval,
-  devrandom=/dev/random)
-AC_MSG_CHECKING(/dev/random to use)
+  devrandom=/dev/urandom)
+AC_MSG_CHECKING(PRNG to use)
 AC_MSG_RESULT($devrandom)
 AC_DEFINE_UNQUOTED(SASL_DEV_RANDOM, "$devrandom", [File to use for source of randomness])
 
@@ -239,7 +245,7 @@ AC_CHECK_PROGS(NM, nm)
 
 AC_MSG_CHECKING(for underscore before symbols)
 AC_CACHE_VAL(sasl_cv_uscore,[
-    echo "void main(){int i=1;}
+    echo "int main(){int i=1; return 0;}
     void foo(){int i=6;}" > conftest.c
     ${CC} -o a.out conftest.c > /dev/null
     if (${NM} a.out | grep _foo) > /dev/null; then
@@ -259,7 +265,7 @@ if test $sasl_cv_uscore = yes; then
 #include <dlfcn.h>
 #include <stdio.h>
 void foo() { int i=0;}
-void main() { void *self, *ptr1, *ptr2; self=dlopen(NULL,RTLD_LAZY);
+int main() { void *self, *ptr1, *ptr2; self=dlopen(NULL,RTLD_LAZY);
     if(self) { ptr1=dlsym(self,"foo"); ptr2=dlsym(self,"_foo");
     if(ptr1 && !ptr2) exit(0); } exit(1); } 
 ], [sasl_cv_dlsym_adds_uscore=yes], sasl_cv_dlsym_adds_uscore=no
@@ -272,38 +278,6 @@ fi
 
 dnl See if we can provide a default logging function...
 AC_CHECK_FUNCS(syslog)
-
-AC_ARG_WITH(pam, [  --with-pam=DIR          use PAM (rooted in DIR) [[yes]] ],
-	with_pam=$withval,
-	with_pam=yes)
-if test "$with_pam" != no; then
-  if test -d $with_pam; then
-    CPPFLAGS="$CPPFLAGS -I${with_pam}/include"
-    LDFLAGS="$LDFLAGS -L${with_pam}/lib"
-  fi
-  AC_CHECK_HEADERS(security/pam_appl.h pam/pam_appl.h)
-  cmu_save_LIBS="$LIBS"
-  AC_CHECK_FUNC(pam_start, :,
-	LIBS="-lpam $LIBS"
-	AC_TRY_LINK([[
-#include <sys/types.h>
-#ifdef HAVE_PAM_PAM_APPL_H
-#include <pam/pam_appl.h>
-#endif
-#ifdef HAVE_SECURITY_PAM_H
-#include <security/pam_appl.h>
-#endif]],[[
-const char *service="foo";
-const char *user="bar";
-pam_handle_t *pamh;
-struct pam_conv *conv;
-int baz;
-baz = pam_start(service, user, conv, &pamh);
-return 0;
-]], LIBPAM="-lpam")
-)
-  LIBS="$cmu_save_LIBS $LIBPAM"
-fi
 
 AC_ARG_WITH(saslauthd, [  --with-saslauthd=DIR    enable use of the saslauth daemon using state dir DIR ],
 		with_saslauthd=$withval,
@@ -432,6 +406,9 @@ AC_MSG_CHECKING(DIGEST-MD5)
 if test "$digest" != no; then
   AC_MSG_RESULT(enabled)
   SASL_MECHS="$SASL_MECHS libdigestmd5.la"
+  if test "$enable_obsolete_digest_attr" = yes; then
+    CPPFLAGS="$CPPFLAGS -DOBSOLETE_DIGEST_ATTR=1"
+  fi
   if test "$enable_static" = yes; then
     SASL_STATIC_SRCS="$SASL_STATIC_SRCS \$(top_srcdir)/plugins/digestmd5.c"
     SASL_STATIC_OBJS="$SASL_STATIC_OBJS digestmd5.o"
@@ -491,8 +468,7 @@ if test "$otp" != no; then
   fi
 
   dnl Test for OPIE
-  AC_ARG_WITH(with-opie,[  --with-opie=PATH        use OPIE (One Time Passwords in Everything) from PATH],
-	with_opie="${withval}")
+  AC_ARG_WITH(opie, AC_HELP_STRING([--with-opie=PATH], [use OPIE (One Time Passwords in Everything) from PATH]))
 
   case "$with_opie" in
 	""|yes) 
@@ -601,7 +577,7 @@ if test "$sia" != no; then
     AC_DEFINE(HAVE_SIA,[],[Include SIA Support])
     LIB_SIA="-lsecurity -ldb -lm -laud"
   else
-    AC_ERROR([No support for SIA found])
+    AC_MSG_ERROR([No support for SIA found])
   fi
 fi
 AC_SUBST(LIB_SIA)
@@ -610,15 +586,11 @@ AC_ARG_ENABLE(auth-sasldb, [  --enable-auth-sasldb    enable experimental SASLdb
   authsasldb=$enableval,
   authsasldb=no)
 if test "$authsasldb" != no; then
-  if test ! -d "../sasldb"; then
-     echo "ERROR: Cannot build sasldb module outside of the full SASL source tree."
-     exit 0;
-  fi
   AC_DEFINE(AUTH_SASLDB,[],[Include SASLdb Support])
   SASL_DB_PATH_CHECK()
   SASL_DB_CHECK()
-  SASL_DB_LIB="$SASL_DB_LIB ../sasldb/.libs/libsasldb.al"
 fi
+AM_CONDITIONAL(AUTH_SASLDB, test "$authsasldb" != no)
 
 AC_ARG_ENABLE(httpform, [  --enable-httpform       enable HTTP form authentication [[no]] ],
   httpform=$enableval,
@@ -627,8 +599,7 @@ if test "$httpform" != no; then
   AC_DEFINE(HAVE_HTTPFORM,[],[Include HTTP form Support])
 fi
 
-AC_ARG_WITH(pam, [  --with-pam=DIR          use PAM (rooted in DIR) [yes] ],
-	with_pam=$withval,
+AC_ARG_WITH(pam, AC_HELP_STRING([--with-pam=DIR], [use PAM (rooted in DIR) [yes]]),,
 	with_pam=yes)
 if test "$with_pam" != no; then
   if test -d $with_pam; then
@@ -976,9 +947,9 @@ case "$with_sqlite" in
     notfound) AC_WARN([SQLite Library not found]); true;;
     *)
      if test -d ${with_sqlite}/lib; then
-         LIB_SQLITE="-L${with_sqlite}/lib -R${with_sqlite}/lib"
+         CMU_ADD_LIBPATH_TO(${with_sqlite}/lib, LIB_SQLITE)
      else
-         LIB_SQLITE="-L${with_sqlite} -R${with_sqlite}"
+         CMU_ADD_LIBPATH_TO(${with_sqlite}, LIB_SQLITE)
      fi
 
      LIB_SQLITE_DIR=$LIB_SQLITE
@@ -1028,9 +999,9 @@ case "$with_sqlite3" in
     notfound) AC_WARN([SQLite3 Library not found]); true;;
     *)
      if test -d ${with_sqlite3}/lib; then
-         LIB_SQLITE3="-L${with_sqlite3}/lib -R${with_sqlite3}/lib"
+         CMU_ADD_LIBPATH_TO(${with_sqlite3}/lib, LIB_SQLITE3)
      else
-         LIB_SQLITE3="-L${with_sqlite3} -R${with_sqlite3}"
+         CMU_ADD_LIBPATH_TO(${with_sqlite3}, LIB_SQLITE3)
      fi
 
      LIB_SQLITE3_DIR=$LIB_SQLITE3
@@ -1050,7 +1021,7 @@ esac
 AC_SUBST(LIB_SQLITE3)
 
 if test "$sql" = yes -a "$with_pgsql" = no -a "$with_mysql" = no -a "$with_sqlite" = no -a "$with_sqlite3" = no; then
-    AC_ERROR([--enable-sql chosen but neither Postgres nor MySQL nor SQLite nor SQLite3 found])
+    AC_MSG_ERROR([--enable-sql chosen but neither Postgres nor MySQL nor SQLite nor SQLite3 found])
 fi
 
 if test "$enable_shared" = yes; then
@@ -1121,17 +1092,15 @@ AC_SUBST(SASL_STATIC_OBJS)
 AC_SUBST(SASL_STATIC_LIBS)
 
 AC_ARG_WITH(plugindir, [  --with-plugindir=DIR    set the directory where plugins will
-                          be found [[/usr/lib/sasl2]] ],
+                          be found [[LIBDIR/sasl2]] ],
   plugindir=$withval,
-  plugindir=/usr/lib/sasl2)
-AC_DEFINE_UNQUOTED(PLUGINDIR, "$plugindir", [Runtime plugin location])
+  plugindir='${libdir}/sasl2')
 AC_SUBST(plugindir)
 
 AC_ARG_WITH(configdir, [   --with-configdir=DIR    set the directory where config files will
-                          be found [/usr/lib/sasl2] ],
+                          be found [PLUGINDIR:SYSCONFDIR/sasl2] ],
   configdir=$withval,
-  configdir=$plugindir:/etc/sasl2)
-AC_DEFINE_UNQUOTED(CONFIGDIR, "$configdir", [Runtime config file location])
+  configdir='${plugindir}:${sysconfdir}/sasl2')
 AC_SUBST(configdir)
 
 dnl look for rc4 libraries. we accept the CMU one or one from openSSL
@@ -1258,12 +1227,13 @@ AC_SUBST(GETSUBOPT)
 dnl Check for snprintf
 sasl_cv_snprintf=no
 SNPRINTFOBJS=""
+LTSNPRINTFOBJS=""
 AC_CHECK_FUNC(snprintf, [AC_DEFINE(HAVE_SNPRINTF,[],[Does the system have snprintf()?])], [sasl_cv_snprintf=yes])
 AC_CHECK_FUNC(vsnprintf, [AC_DEFINE(HAVE_VSNPRINTF,[],[Does the system have vsnprintf()?])], [sasl_cv_snprintf=yes])
 if test $sasl_cv_snprintf = yes; then
-	AC_LIBOBJ(snprintf)
-        SNPRINTFOBJS="snprintf.o"
-        LTSNPRINTFOBJS="snprintf.lo"
+       AC_LIBOBJ(snprintf)
+       SNPRINTFOBJS="snprintf.o"
+       LTSNPRINTFOBJS="snprintf.lo"
 fi
 AC_SUBST(SNPRINTFOBJS)
 AC_SUBST(LTSNPRINTFOBJS)
@@ -1299,6 +1269,7 @@ AC_SUBST(GETNAMEINFOOBJS)
 AC_SUBST(LTGETNAMEINFOOBJS)
 
 LTLIBOBJS=`echo "$LIB@&t@OBJS" | sed 's,\.[[^.]]* ,.lo ,g;s,\.[[^.]]*$,.lo,'`
+AM_CONDITIONAL(BUILD_LIBOBJ, test "$LTLIBOBJS" != "")
 AC_SUBST(LTLIBOBJS)
 
 AC_C_CONST
@@ -1320,6 +1291,28 @@ IPv6_CHECK_SOCKLEN_T()
 #AC_FUNC_MEMCMP
 #AC_FUNC_VPRINTF
 AC_CHECK_FUNCS(gethostname getdomainname getpwnam getspnam gettimeofday inet_aton memcpy mkdir select socket strchr strdup strerror strspn strstr strtol jrand48 getpassphrase asprintf strlcat strlcpy)
+
+if test $ac_cv_func_getspnam = yes; then
+	AC_MSG_CHECKING(if getpwnam_r/getspnam_r take 5 arguments)
+	AC_TRY_COMPILE(
+		[
+#include <sys/types.h>
+#include <pwd.h>
+#include <shadow.h>
+		],
+		[
+struct passwd *pw;
+struct passwd pwbuf;
+char pwdata[512];
+(void) getpwnam_r("bin", &pwbuf, pwdata, sizeof(pwdata), &pw);
+		],
+		[AC_MSG_RESULT(yes)
+		 AC_DEFINE(GETXXNAM_R_5ARG, 1,
+			[Define if your getpwnam_r()/getspnam_r()
+			functions take 5 arguments])],
+		[AC_MSG_RESULT(no)]
+	)
+fi
 
 if test $enable_cmulocal = yes; then
     AC_WARN([enabling CMU local kludges])
@@ -1440,11 +1433,6 @@ struct iovec {
 #define _GNU_SOURCE
 #endif
 
-#ifndef HAVE___ATTRIBUTE__
-/* Can't use attributes... */
-#define __attribute__(foo)
-#endif
-
 #define SASL_PATH_ENV_VAR "SASL_PATH"
 #define SASL_CONF_PATH_ENV_VAR "SASL_CONF_PATH"
 
@@ -1558,6 +1546,13 @@ extern int asprintf(char **str, const char *fmt, ...);
 #endif /* CONFIG_H */
 ])
 
+AH_BOTTOM([#if defined __GNUC__ &&  __GNUC__ > 6
+    #define GCC_FALLTHROUGH __attribute__((fallthrough));
+#else
+    #define GCC_FALLTHROUGH /* fall through */
+#endif
+])
+
 AC_CONFIG_HEADERS(config.h)
 
 AC_OUTPUT(Makefile
@@ -1565,10 +1560,10 @@ libsasl2.pc
 include/Makefile
 saslauthd/Makefile
 sasldb/Makefile
+common/Makefile
 plugins/Makefile
 lib/Makefile
 utils/Makefile
-doc/Makefile
 sample/Makefile
 java/Makefile
 java/CyrusSasl/Makefile
@@ -1577,8 +1572,7 @@ java/javax/Makefile
 java/javax/security/Makefile
 java/javax/security/auth/Makefile
 java/javax/security/auth/callback/Makefile
-pwcheck/Makefile
-man/Makefile)
+pwcheck/Makefile)
 
 AC_MSG_NOTICE([
 

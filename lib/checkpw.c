@@ -1,10 +1,9 @@
 /* SASL server API implementation
  * Rob Siemborski
  * Tim Martin
- * $Id: checkpw.c,v 1.79 2009/05/08 00:43:44 murch Exp $
  */
 /* 
- * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
+ * Copyright (c) 1998-2016 Carnegie Mellon University.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -22,12 +21,13 @@
  *    endorse or promote products derived from this software without
  *    prior written permission. For permission or any other legal
  *    details, please contact  
- *      Office of Technology Transfer
  *      Carnegie Mellon University
- *      5000 Forbes Avenue
- *      Pittsburgh, PA  15213-3890
- *      (412) 268-4387, fax: (412) 268-7395
- *      tech-transfer@andrew.cmu.edu
+ *      Center for Technology Transfer and Enterprise Creation
+ *      4615 Forbes Avenue
+ *      Suite 302
+ *      Pittsburgh, PA  15213
+ *      (412) 268-7393, fax: (412) 268-7395
+ *      innovation@andrew.cmu.edu
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
@@ -434,6 +434,7 @@ static int write_wait(int fd, unsigned delta)
 	case -1:
 	    if (errno == EINTR || errno == EAGAIN)
 		continue;
+            return -1;
 	default:
 	    /* Error catch-all. */
 	    return -1;
@@ -588,6 +589,7 @@ static int read_wait(int fd, unsigned delta)
 	    errno = ETIMEDOUT;
 	    return -1;
 	case +1:
+	case +2:
 	    if (FD_ISSET(fd, &rfds)) {
 		/* Success, file descriptor is readable. */
 		return 0;
@@ -596,6 +598,7 @@ static int read_wait(int fd, unsigned delta)
 	case -1:
 	    if (errno == EINTR || errno == EAGAIN)
 		continue;
+            return -1;
 	default:
 	    /* Error catch-all. */
 	    return -1;
@@ -664,7 +667,11 @@ static int saslauthd_verify_password(sasl_conn_t *conn,
 	getopt(context, NULL, "saslauthd_path", &p, NULL);
     }
     if (p) {
-	strncpy(pwpath, p, sizeof(pwpath));
+        if (strlen(p) >= sizeof(pwpath))
+            return SASL_FAIL;
+
+	strncpy(pwpath, p, sizeof(pwpath) - 1);
+        pwpath[strlen(p)] = '\0';
     } else {
 	if (strlen(PATH_SASLAUTHD_RUNDIR) + 4 + 1 > sizeof(pwpath))
 	    return SASL_FAIL;
@@ -783,7 +790,8 @@ static int saslauthd_verify_password(sasl_conn_t *conn,
 
     memset((char *)&srvaddr, 0, sizeof(srvaddr));
     srvaddr.sun_family = AF_UNIX;
-    strncpy(srvaddr.sun_path, pwpath, sizeof(srvaddr.sun_path));
+    strncpy(srvaddr.sun_path, pwpath, sizeof(srvaddr.sun_path) - 1);
+    srvaddr.sun_path[strlen(pwpath)] = '\0';
 
     {
 	int r = connect(s, (struct sockaddr *) &srvaddr, sizeof(srvaddr));

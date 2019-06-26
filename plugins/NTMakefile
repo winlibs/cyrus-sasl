@@ -119,16 +119,23 @@ OPENSSL_FLAGS= /I $(OPENSSL_INCLUDE)
 OPENSSL_FLAGS=
 !ENDIF 
 
+!IF "$(GSSAPILIB)" == ""
+GSSAPILIB=gssapi32.lib
+!ENDIF
+
 !IF "$(GSSAPI)" == "CyberSafe"
 GSS_FLAGS= /I $(GSSAPI_INCLUDE) /D "HAVE_GSS_C_NT_HOSTBASED_SERVICE" /D "HAVE_GSS_C_NT_USER_NAME"
-GSS_LIBS=/libpath:$(GSSAPI_LIBPATH) gssapi32.lib
+GSS_LIBS=/libpath:$(GSSAPI_LIBPATH) $(GSSAPILIB)
+!ELSE IF "$(GSSAPI)" == "MITKerberos"
+GSS_FLAGS= /I $(GSSAPI_INCLUDE) /D "HAVE_GSS_C_NT_HOSTBASED_SERVICE" /D "HAVE_GSS_C_NT_USER_NAME"
+GSS_LIBS=/libpath:$(GSSAPI_LIBPATH) $(GSSAPILIB)
 !ELSE 
 GSS_FLAGS=
 GSS_LIBS=
 !ENDIF
 
 !IF "$(SASLDB)" == "LMDB"
-DB_LIBS=/libpath:$(LMDB_LIBPATH) liblmdb_a.lib
+DB_LIBS=/libpath:$(LMDB_LIBPATH) lmdb.lib
 
 # Auxprop Plugin
 libsasldb_sources = allockey.c db_lmdb.c
@@ -164,7 +171,7 @@ EXTRA_FLAGS = /D TARGET_WIN_SYSTEM=$(TARGET_WIN_SYSTEM) $(EXTRA_FLAGS)
 EXTRA_FLAGS=$(EXTRA_FLAGS) $(DB_FLAGS) $(OPENSSL_FLAGS) $(GSS_FLAGS) $(SRP_FLAGS) $(SQL_FLAGS) $(DIGEST_FLAGS) $(CRAM_FLAGS) $(SCRAM_FLAGS) $(LDAP_FLAGS)
 CPPFLAGS = /I "..\win32\include" /I "." /I "..\include" $(EXTRA_FLAGS) /D "WIN32" /D "_WIN32" /D "_WINDOWS" /D "_MBCS" /D "_USRDLL"
 
-OPENSSL_LIBS=/libpath:$(OPENSSL_LIBPATH) libssl.lib libcrypto.lib
+OPENSSL_LIBS=/libpath:$(OPENSSL_LIBPATH) libeay32.lib ssleay32.lib
 
 # Where to install files from this directory
 libdir = $(prefix)\lib
@@ -192,6 +199,12 @@ getaddrinfo.c: ..\lib\getaddrinfo.c
 
 getnameinfo.c: ..\lib\getnameinfo.c
 	xcopy /D /Y ..\lib\getnameinfo.c .
+
+plugin_common.c: ..\common\plugin_common.c
+	xcopy /D /Y ..\common\plugin_common.c .
+
+plugin_common.h: ..\common\plugin_common.h
+	xcopy /D /Y ..\common\plugin_common.h .
 
 allockey.c: ..\sasldb\allockey.c
 	xcopy /D /Y ..\sasldb\allockey.c .
@@ -279,6 +292,8 @@ CLEAN :
 	-@erase db_berkeley.c
 	-@erase db_lmdb.c
 	-@erase getnameinfo.c
+	-@erase plugin_common.h
+	-@erase plugin_common.c
 	-@erase $(generated_rc)
 	-@erase "*.res"
 	-@erase $(all_out)

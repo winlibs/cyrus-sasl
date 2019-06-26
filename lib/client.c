@@ -1,10 +1,9 @@
 /* SASL client API implementation
  * Rob Siemborski
  * Tim Martin
- * $Id: client.c,v 1.86 2011/09/01 14:12:53 mel Exp $
  */
 /* 
- * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
+ * Copyright (c) 1998-2016 Carnegie Mellon University.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -22,12 +21,13 @@
  *    endorse or promote products derived from this software without
  *    prior written permission. For permission or any other legal
  *    details, please contact  
- *      Office of Technology Transfer
  *      Carnegie Mellon University
- *      5000 Forbes Avenue
- *      Pittsburgh, PA  15213-3890
- *      (412) 268-4387, fax: (412) 268-7395
- *      tech-transfer@andrew.cmu.edu
+ *      Center for Technology Transfer and Enterprise Creation
+ *      4615 Forbes Avenue
+ *      Suite 302
+ *      Pittsburgh, PA  15213
+ *      (412) 268-7393, fax: (412) 268-7395
+ *      innovation@andrew.cmu.edu
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
@@ -150,6 +150,11 @@ static int mech_compare(const sasl_client_plug_t *a,
     /* XXX  the following is fairly arbitrary, but its independent
        of the order in which the plugins are loaded
     */
+#ifdef PREFER_MECH
+    if (!strcasecmp(a->mech_name, PREFER_MECH)) return 1;
+    if (!strcasecmp(b->mech_name, PREFER_MECH)) return -1;
+#endif
+
     sec_diff = a->security_flags ^ b->security_flags;
     if (sec_diff & a->security_flags & SASL_SEC_NOANONYMOUS) return 1;
     if (sec_diff & b->security_flags & SASL_SEC_NOANONYMOUS) return -1;
@@ -474,7 +479,8 @@ int sasl_client_new(const char *service,
 		  conn->mech_list = new;
 		  tail = conn->mech_list;
 	      } else {
-		  tail->next = new;
+		  if (tail)
+                    tail->next = new;
 		  tail = new;
 	      }
 	      conn->mech_length++;
@@ -606,7 +612,7 @@ _sasl_client_order_mechs(const sasl_utils_t *utils,
 		    if (*server_can_cb == 0 && has_cb_data)
 			*server_can_cb = 1;
 		}
-		start = ++i;
+		start = i+1;
 	    }
 	}
 	if (has_cb_data)
@@ -658,20 +664,6 @@ _sasl_cbinding_disp(sasl_client_params_t *cparams,
     return SASL_OK;
 }
 
-static int
-_sasl_are_current_security_flags_worse_then_best(unsigned best_security_flags,
-						 unsigned current_security_flags)
-{
-    /* We don't qualify SASL_SEC_PASS_CREDENTIALS as "secure" flag */
-    best_security_flags &= ~SASL_SEC_PASS_CREDENTIALS;
-
-    if ((current_security_flags ^ best_security_flags) & best_security_flags) {
-	return 1;
-    } else {
-	return 0;
-    }
-}
-
 /* select a mechanism for a connection
  *  mechlist      -- mechanisms server has available (punctuation ignored)
  *  secret        -- optional secret from previous session
@@ -708,7 +700,7 @@ int sasl_client_start(sasl_conn_t *conn,
     char *ordered_mechs = NULL, *name;
     cmechanism_t *m = NULL, *bestm = NULL;
     size_t i, list_len, name_len;
-    sasl_ssf_t bestssf = 0, minssf = 0;
+    sasl_ssf_t minssf = 0;
     int result, server_can_cb = 0;
     sasl_cbinding_disp_t cbindingdisp;
     sasl_cbinding_disp_t cur_cbindingdisp;
@@ -760,14 +752,14 @@ int sasl_client_start(sasl_conn_t *conn,
     if (result != 0)
 	goto done;
 
-    for (i = 0, name = ordered_mechs; i < list_len; i++) {
+    /* for each mechanism in client's list */
+    for (m = c_conn->mech_list; !bestm && m != NULL; m = m->next) {
 
-	name_len = strlen(name);
+        for (i = 0, name = ordered_mechs; i < list_len; i++, name += name_len + 1) {
+            unsigned myflags;
+            int plus;
 
-	/* for each mechanism in client's list */
-	for (m = c_conn->mech_list; m != NULL; m = m->next) {
-	    unsigned myflags;
-	    int plus;
+            name_len = strlen(name);
 
 	    if (!_sasl_is_equal_mech(name, m->m.plug->mech_name, name_len, &plus)) {
 		continue;
@@ -818,65 +810,23 @@ int sasl_client_start(sasl_conn_t *conn,
 		break;
 	    }
 
-	    /* compare security flags, only take new mechanism if it has
-	     * all the security flags of the previous one.
-	     *
-	     * From the mechanisms we ship with, this yields the order:
-	     *
-	     * SRP
-	     * GSSAPI + KERBEROS_V4
-	     * DIGEST + OTP
-	     * CRAM + EXTERNAL
-	     * PLAIN + LOGIN + ANONYMOUS
-	     *
-	     * This might be improved on by comparing the numeric value of
-	     * the bitwise-or'd security flags, which splits DIGEST/OTP,
-	     * CRAM/EXTERNAL, and PLAIN/LOGIN from ANONYMOUS, but then we
-	     * are depending on the numeric values of the flags (which may
-	     * change, and their ordering could be considered dumb luck.
-	     */
-
-	    if (bestm &&
-		_sasl_are_current_security_flags_worse_then_best(
-		    bestm->m.plug->security_flags,
-		    m->m.plug->security_flags)) {
-		break;
-	    }
-
 	    if (SASL_CB_PRESENT(c_conn->cparams) && plus) {
 		cur_cbindingdisp = SASL_CB_DISP_USED;
 	    } else {
 		cur_cbindingdisp = cbindingdisp;
 	    }
 
-	    if (bestm && (best_cbindingdisp > cur_cbindingdisp)) {
-		break;
-	    }
-
-#ifdef PREFER_MECH
-	    if (strcasecmp(m->m.plug->mech_name, PREFER_MECH) &&
-		bestm && m->m.plug->max_ssf <= bestssf) {
-		/* this mechanism isn't our favorite, and it's no better
-		   than what we already have! */
-		break;
-	    }
-#else
-	    if (bestm && m->m.plug->max_ssf <= bestssf) {
-		/* this mechanism is no better than what we already have! */
-		break;
-	    }
-#endif
-
 	    if (mech) {
 		*mech = m->m.plug->mech_name;
 	    }
 
+            /* Since the list of client mechs is ordered by preference/strength,
+               the first mech in our list that is available on the server and
+               meets our security properties and features is the "best" */
 	    best_cbindingdisp = cur_cbindingdisp;
-	    bestssf = m->m.plug->max_ssf;
 	    bestm = m;
 	    break;
 	}
-	name += strlen(name) + 1;
     }
 
     if (bestm == NULL) {

@@ -27,10 +27,6 @@
  * DAMAGE.
  * END COPYRIGHT */
 
-#ifdef __GNUC__
-#ident "$Id: auth_shadow.c,v 1.12 2009/08/14 14:58:38 mel Exp $"
-#endif
-
 #include <config.h>
 
 /* PUBLIC DEPENDENCIES */
@@ -39,6 +35,9 @@
 
 #ifdef AUTH_SHADOW
 
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE
+#endif
 #define PWBUFSZ 256 /***SWB***/
 
 # include <unistd.h>
@@ -125,6 +124,8 @@ auth_shadow (
 
     struct spwd spbuf;
     char spdata[PWBUFSZ];		/* spbuf indirect data goes in here */
+
+    struct crypt_data cdata;
 #  endif /* _REENTRANT */
     /* END VARIABLES */
 
@@ -217,7 +218,12 @@ auth_shadow (
 	RETURN("NO Insufficient permission to access NIS authentication database (saslauthd)");
     }
 
+#  ifdef _REENTRANT
+    cdata.initialized = 0;
+    cpw = crypt_r(password, sp->sp_pwdp, &cdata);
+#  else
     cpw = crypt(password, sp->sp_pwdp);
+#  endif /* _REENTRANT */
     if (!cpw || strcmp(sp->sp_pwdp, (const char *)cpw)) {
 	if (flags & VERBOSE) {
 	    /*

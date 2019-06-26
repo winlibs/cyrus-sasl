@@ -1,10 +1,9 @@
 /* SASL server API implementation
  * Rob Siemborski
  * Tim Martin
- * $Id: server.c,v 1.177 2011/11/08 17:22:40 murch Exp $
  */
 /* 
- * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
+ * Copyright (c) 1998-2016 Carnegie Mellon University.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -22,12 +21,13 @@
  *    endorse or promote products derived from this software without
  *    prior written permission. For permission or any other legal
  *    details, please contact  
- *      Office of Technology Transfer
  *      Carnegie Mellon University
- *      5000 Forbes Avenue
- *      Pittsburgh, PA  15213-3890
- *      (412) 268-4387, fax: (412) 268-7395
- *      tech-transfer@andrew.cmu.edu
+ *      Center for Technology Transfer and Enterprise Creation
+ *      4615 Forbes Avenue
+ *      Suite 302
+ *      Pittsburgh, PA  15213
+ *      (412) 268-7393, fax: (412) 268-7395
+ *      innovation@andrew.cmu.edu
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
@@ -422,8 +422,8 @@ int sasl_server_add_plugin(const char *plugname,
 			   sasl_server_plug_init_t *p)
 {
     int plugcount;
-    sasl_server_plug_t *pluglist;
-    sasl_server_plug_init_t *entry_point;
+    sasl_server_plug_t *pluglist = NULL;
+    sasl_server_plug_init_t *entry_point = NULL;
     int result;
     int version;
     int lupe;
@@ -573,12 +573,16 @@ static int server_done(void) {
 
 static int server_idle(sasl_conn_t *conn)
 {
-    sasl_server_conn_t *s_conn = (sasl_server_conn_t *) conn;
+    sasl_server_conn_t *s_conn = NULL;
     mechanism_t *m;
 
     if (! mechlist) {
 	return 0;
     }
+
+    if (!conn)
+        return 1;
+    s_conn = (sasl_server_conn_t *) conn;
 
     for (m = s_conn->mech_list;
 	 m != NULL;
@@ -586,7 +590,7 @@ static int server_idle(sasl_conn_t *conn)
 	if (m->m.plug->idle
 	    &&  m->m.plug->idle(m->m.plug->glob_context,
 				conn,
-				conn ? ((sasl_server_conn_t *)conn)->sparams : NULL)) {
+				s_conn->sparams)) {
 	    return 1;
 	}
     }
@@ -1150,7 +1154,8 @@ int sasl_server_new(const char *service,
 		  tail = serverconn->mech_list;
 	      }
 	      else {
-		  tail->next = new;
+		  if (tail)
+                     tail->next = new;
 		  tail = new;
 	      }
 	      serverconn->mech_length++;
@@ -1426,9 +1431,9 @@ int sasl_server_start(sasl_conn_t *conn,
     }
 
     if (m->m.condition == SASL_CONTINUE) {
-	sasl_server_plug_init_t *entry_point;
+	sasl_server_plug_init_t *entry_point = NULL;
 	void *library = NULL;
-	sasl_server_plug_t *pluglist;
+	sasl_server_plug_t *pluglist = NULL;
 	int version, plugcount;
 	int l = 0;
 

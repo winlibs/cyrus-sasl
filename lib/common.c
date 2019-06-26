@@ -1,10 +1,9 @@
 /* common.c - Functions that are common to server and clinet
  * Rob Siemborski
  * Tim Martin
- * $Id: common.c,v 1.134 2011/09/22 14:40:30 mel Exp $
  */
 /* 
- * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
+ * Copyright (c) 1998-2016 Carnegie Mellon University.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -22,12 +21,13 @@
  *    endorse or promote products derived from this software without
  *    prior written permission. For permission or any other legal
  *    details, please contact  
- *      Office of Technology Transfer
  *      Carnegie Mellon University
- *      5000 Forbes Avenue
- *      Pittsburgh, PA  15213-3890
- *      (412) 268-4387, fax: (412) 268-7395
- *      tech-transfer@andrew.cmu.edu
+ *      Center for Technology Transfer and Enterprise Creation
+ *      4615 Forbes Avenue
+ *      Suite 302
+ *      Pittsburgh, PA  15213
+ *      (412) 268-7393, fax: (412) 268-7395
+ *      innovation@andrew.cmu.edu
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
@@ -82,11 +82,9 @@ static char * _sasl_get_default_unix_path(void *context __attribute__((unused)),
 #else
 /* NB: Always returned allocated value */
 static char * _sasl_get_default_win_path(void *context __attribute__((unused)),
-                            char * reg_attr_name, char * default_value);
+                            TCHAR * reg_attr_name, char * default_value);
 #endif
 
-
-static const char build_ident[] = "$Build: libsasl " PACKAGE "-" VERSION " $";
 
 /* It turns out to be convenient to have a shared sasl_utils_t */
 const sasl_utils_t *sasl_global_utils = NULL;
@@ -838,19 +836,20 @@ void sasl_dispose(sasl_conn_t **pconn)
 
   /* serialize disposes. this is necessary because we can't
      dispose of conn->mutex if someone else is locked on it */
+  if (!free_mutex) {
+      free_mutex = sasl_MUTEX_ALLOC();
+      if (!free_mutex) return;
+  }
+
   result = sasl_MUTEX_LOCK(free_mutex);
   if (result!=SASL_OK) return;
   
   /* *pconn might have become NULL by now */
-  if (! (*pconn))
-  {
-	sasl_MUTEX_UNLOCK(free_mutex);
-	return;
+  if (*pconn) {
+      (*pconn)->destroy_conn(*pconn);
+      sasl_FREE(*pconn);
+      *pconn=NULL;
   }
-
-  (*pconn)->destroy_conn(*pconn);
-  sasl_FREE(*pconn);
-  *pconn=NULL;
 
   sasl_MUTEX_UNLOCK(free_mutex);
 }
@@ -1029,7 +1028,7 @@ int sasl_getprop(sasl_conn_t *conn, int propnum, const void **pvalue)
 	  *((const char **)pvalue) = conn->oparams.gss_peer_name;
       break;
   case SASL_GSS_LOCAL_NAME:
-      if(! conn->oparams.gss_peer_name)
+      if(! conn->oparams.gss_local_name)
 	  result = SASL_NOTDONE;
       else
 	  *((const char **)pvalue) = conn->oparams.gss_local_name;
@@ -1384,7 +1383,9 @@ const char *sasl_errdetail(sasl_conn_t *conn)
 	     sasl_usererr(conn->error_code), errstr);
     
     need_len = (unsigned) (strlen(leader) + strlen(conn->error_buf) + 12);
-    _buf_alloc(&conn->errdetail_buf, &conn->errdetail_buf_len, need_len);
+    if (_buf_alloc(&conn->errdetail_buf, &conn->errdetail_buf_len, need_len) != SASL_OK) {
+        return NULL;
+    }
 
     snprintf(conn->errdetail_buf, need_len, "%s%s", leader, conn->error_buf);
    
@@ -1549,10 +1550,12 @@ _sasl_getsimple(void *context,
 	DWORD i;
 	BOOL rval;
 	static char sender[128];
-	
-	i = sizeof(sender);
-	rval = GetUserName(sender, &i);
+
+    TCHAR tsender[128];
+	i = sizeof(tsender) / sizeof(tsender[0]);
+	rval = GetUserName(tsender, &i);
 	if ( rval) { /* got a userid */
+        WideCharToMultiByte(CP_UTF8, 0, tsender, -1, sender, sizeof(sender), NULL, NULL); /* -1 ensures null-terminated utf8 */
 		*result = sender;
 		if (len) *len = strlen(sender);
 		return SASL_OK;
@@ -1674,6 +1677,7 @@ _sasl_getconfpath_simple(void *context __attribute__((unused)),
 
     return SASL_OK;
 }
+
 
 static int
 _sasl_verifyfile(void *context __attribute__((unused)),
@@ -1824,7 +1828,7 @@ _sasl_log (sasl_conn_t *conn,
 	   const char *fmt,
 	   ...)
 {
-  char *out=(char *) sasl_ALLOC(250);
+  char *out = NULL;
   size_t alloclen=100; /* current allocated length */
   size_t outlen=0; /* current length of output buffer */
   size_t formatlen;
@@ -1838,9 +1842,11 @@ _sasl_log (sasl_conn_t *conn,
   char *cval;
   va_list ap; /* varargs thing */
 
-  if(!fmt) goto done;
-  if(!out) return;
+  if(!fmt) return;
   
+  out = (char *) sasl_ALLOC(250);
+  if(!out) return;
+
   formatlen = strlen(fmt);
 
   /* See if we have a logging callback... */
@@ -1977,12 +1983,11 @@ _sasl_log (sasl_conn_t *conn,
   if (result != SASL_OK) goto done;
   out[outlen]=0;
 
-  va_end(ap);    
-
   /* send log message */
   result = log_cb(log_ctx, level, out);
 
  done:
+  va_end(ap);
   if(out) sasl_FREE(out);
 }
 
@@ -2453,11 +2458,11 @@ _sasl_get_default_unix_path(void *context __attribute__((unused)),
     return path;
 }
 
-#else
+#else /*WIN32*/
 /* Return NULL on failure */
 static char *
 _sasl_get_default_win_path(void *context __attribute__((unused)),
-                           char * reg_attr_name,
+                           TCHAR * reg_attr_name,
                            char * default_value)
 {
     /* Open registry entry, and find all registered SASL libraries.
@@ -2477,12 +2482,12 @@ _sasl_get_default_win_path(void *context __attribute__((unused)),
     HKEY  hKey;
     DWORD ret;
     DWORD ValueType;		    /* value type */
-    DWORD cbData;		    /* value size */
-    BYTE * ValueData;		    /* value */
-    DWORD cbExpandedData;	    /* "expanded" value size */
-    BYTE * ExpandedValueData;	    /* "expanded" value */
-    char * return_value;	    /* function return value */
-    char * tmp;
+    DWORD cbData;		    /* value size in bytes and later number of wchars */
+    TCHAR * ValueData;		    /* value */
+    DWORD cbExpandedData;	    /* "expanded" value size in wchars */
+    TCHAR * ExpandedValueData;	    /* "expanded" value */
+    TCHAR * return_value;	    /* function return value */
+    TCHAR * tmp;
 
     /* Initialization */
     ExpandedValueData = NULL;
@@ -2498,8 +2503,9 @@ _sasl_get_default_win_path(void *context __attribute__((unused)),
 
     if (ret != ERROR_SUCCESS) { 
         /* no registry entry */
-        (void) _sasl_strdup (default_value, &return_value, NULL);
-        return return_value;
+        char *ret;
+        (void) _sasl_strdup (default_value, &ret, NULL);
+        return ret;
     }
 
     /* figure out value type and required buffer size */
@@ -2520,28 +2526,35 @@ _sasl_get_default_win_path(void *context __attribute__((unused)),
     }
 
     /* Any high water mark? */
-    ValueData = sasl_ALLOC(cbData);
+    ValueData = sasl_ALLOC(cbData + 2 * sizeof(TCHAR)); /* extra bytes to insert null-terminator if it's missed */
     if (ValueData == NULL) {
 	return_value = NULL;
 	goto CLEANUP;
     };
 
-    RegQueryValueEx (hKey,
-		     reg_attr_name,
-		     NULL,	    /* reserved */
-		     &ValueType,
-		     ValueData,
-		     &cbData);
+    if (RegQueryValueEx(hKey,
+        reg_attr_name,
+        NULL,	    /* reserved */
+        &ValueType,
+        (LPBYTE)ValueData,
+        &cbData) != ERROR_SUCCESS) {
+        return_value = NULL;
+        goto CLEANUP;
+    }
+    cbData /= sizeof(TCHAR); /* covert to number of symbols */
+    ValueData[cbData] = '\0'; /* MS docs say we have to to that */
+    ValueData[cbData + 1] = '\0'; /* for MULTI */
 
     switch (ValueType) {
     case REG_EXPAND_SZ:
         /* : A random starting guess */
         cbExpandedData = cbData + 1024;
-        ExpandedValueData = sasl_ALLOC(cbExpandedData);
+        ExpandedValueData = (TCHAR*)sasl_ALLOC(cbExpandedData * sizeof(TCHAR));
         if (ExpandedValueData == NULL) {
             return_value = NULL;
             goto CLEANUP;
         };
+
 
         cbExpandedData = ExpandEnvironmentStrings(
                                                   ValueData,
@@ -2557,7 +2570,7 @@ _sasl_get_default_win_path(void *context __attribute__((unused)),
         /* : Must retry expansion with the bigger buffer */
         if (cbExpandedData > cbData + 1024) {
             /* : Memory leak here if can't realloc */
-            ExpandedValueData = sasl_REALLOC(ExpandedValueData, cbExpandedData);
+            ExpandedValueData = sasl_REALLOC(ExpandedValueData, cbExpandedData * sizeof(TCHAR));
             if (ExpandedValueData == NULL) {
                 return_value = NULL;
                 goto CLEANUP;
@@ -2598,7 +2611,7 @@ _sasl_get_default_win_path(void *context __attribute__((unused)),
                 /* : Replace delimiting NUL with our delimiter characted */
                 tmp[0] = PATHS_DELIMITER;
             }
-            tmp += strlen(tmp);
+            tmp += (_tcslen(tmp));
         }
         break;
 
@@ -2611,15 +2624,51 @@ _sasl_get_default_win_path(void *context __attribute__((unused)),
         goto CLEANUP;
     }
 
-    return_value = ValueData;
+    return_value = ValueData; /* just to flag we have a result */
 
 CLEANUP:
     RegCloseKey(hKey);
     if (ExpandedValueData != NULL) sasl_FREE(ExpandedValueData);
     if (return_value == NULL) {
-	if (ValueData != NULL) sasl_FREE(ValueData);
+	    if (ValueData != NULL) sasl_FREE(ValueData);
+        return NULL;
+    }
+    if (sizeof(TCHAR) == sizeof(char)) {
+        return (char*)return_value;
     }
 
-    return (return_value);
+    /* convert to utf-8 for compatibility with other OS' */
+    {
+        char *tmp = _sasl_wchar_to_utf8(return_value);
+        sasl_FREE(return_value);
+        return tmp;
+    }
 }
-#endif
+
+char* _sasl_wchar_to_utf8(WCHAR *str)
+{
+    size_t bufLen = WideCharToMultiByte(CP_UTF8, 0, str, -1, NULL, 0, NULL, NULL);
+    char *buf = sasl_ALLOC(bufLen);
+    if (buf) {
+        if (WideCharToMultiByte(CP_UTF8, 0, str, -1, buf, bufLen, NULL, NULL) == 0) { /* -1 ensures null-terminated utf8 */
+            sasl_FREE(buf);
+            buf = NULL;
+        }
+    }
+    return buf;
+}
+
+WCHAR* _sasl_utf8_to_wchar(const char *str)
+{
+    size_t bufLen = MultiByteToWideChar(CP_UTF8, 0, str, -1, NULL, 0);
+    WCHAR *buf = sasl_ALLOC(bufLen * sizeof(WCHAR));
+    if (buf) {
+        if (MultiByteToWideChar(CP_UTF8, 0, str, -1, buf, bufLen) == 0) { /* -1 ensures null-terminated utf8 */
+            sasl_FREE(buf);
+            buf = NULL;
+        }
+    }
+    return buf;
+}
+
+#endif /*WIN32*/

@@ -52,11 +52,11 @@ libsasl.dll: $(libsasl_objs) $(libsasl_res)
 <<
 	IF EXIST $@.manifest mt -manifest $@.manifest -outputresource:$@;2
 
-plugin_common.c: ..\plugins\plugin_common.c plugin_common.h
-	xcopy /D /Y ..\plugins\plugin_common.c .
+plugin_common.c: ..\common\plugin_common.c plugin_common.h
+	xcopy /D /Y ..\common\plugin_common.c .
 
-plugin_common.h: ..\plugins\plugin_common.h
-	xcopy /D /Y ..\plugins\plugin_common.h .
+plugin_common.h: ..\common\plugin_common.h
+	xcopy /D /Y ..\common\plugin_common.h .
 
 auxprop.obj checkpw.obj client.obj common.obj external.obj plugin_common.obj server.obj seterror.obj: ..\include\saslplug.h
 
@@ -99,7 +99,7 @@ BEGIN
             VALUE "FileDescription", "CMU SASL API v2\0"
             VALUE "FileVersion", "$(SASL_VERSION_MAJOR).$(SASL_VERSION_MINOR).$(SASL_VERSION_STEP).0\0"
             VALUE "InternalName", "libsasl\0"
-            VALUE "LegalCopyright", "Copyright (c) Carnegie Mellon University 2002-2012\0"
+            VALUE "LegalCopyright", "Copyright (c) Carnegie Mellon University 2002-2017\0"
             VALUE "OriginalFilename", "libsasl.dll\0"
             VALUE "ProductName", "Carnegie Mellon University SASL\0"
             VALUE "ProductVersion", "$(SASL_VERSION_MAJOR).$(SASL_VERSION_MINOR).$(SASL_VERSION_STEP)-0"

@@ -30,7 +30,7 @@
  * SUCH DAMAGE.
  */
 /*
- * Copyright (c) 1998-2003 Carnegie Mellon University.
+ * Copyright (c) 1998-2016 Carnegie Mellon University.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,12 +49,13 @@
  *    endorse or promote products derived from this software without
  *    prior written permission. For permission or any other legal
  *    details, please contact
- *      Office of Technology Transfer
  *      Carnegie Mellon University
- *      5000 Forbes Avenue
- *      Pittsburgh, PA  15213-3890
- *      (412) 268-4387, fax: (412) 268-7395
- *      tech-transfer@andrew.cmu.edu
+ *      Center for Technology Transfer and Enterprise Creation
+ *      4615 Forbes Avenue
+ *      Suite 302
+ *      Pittsburgh, PA  15213
+ *      (412) 268-7393, fax: (412) 268-7395
+ *      innovation@andrew.cmu.edu
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
@@ -715,12 +716,6 @@ static int gs2_client_mech_step(void *conn_context,
     }
 
     if (text->server_name == GSS_C_NO_NAME) { /* only once */
-        name_buf.length = strlen(params->service) + 1 + strlen(params->serverFQDN);
-        name_buf.value = params->utils->malloc(name_buf.length + 1);
-        if (name_buf.value == NULL) {
-            ret = SASL_NOMEM;
-            goto cleanup;
-        }
         if (params->serverFQDN == NULL ||
             strlen(params->serverFQDN) == 0) {
             SETERROR(text->utils, "GS2 Failure: no serverFQDN");
@@ -728,6 +723,12 @@ static int gs2_client_mech_step(void *conn_context,
             goto cleanup;
         }
 
+        name_buf.length = strlen(params->service) + 1 + strlen(params->serverFQDN);
+        name_buf.value = params->utils->malloc(name_buf.length + 1);
+        if (name_buf.value == NULL) {
+            ret = SASL_NOMEM;
+            goto cleanup;
+        }
         snprintf(name_buf.value, name_buf.length + 1,
                  "%s@%s", params->service, params->serverFQDN);
 
@@ -1841,9 +1842,9 @@ sasl_gs2_seterror_(const sasl_utils_t *utils, OM_uint32 maj, OM_uint32 min,
     strcat(out, ")");
 
     if (logonly) {
-        utils->log(utils->conn, SASL_LOG_FAIL, out);
+        utils->log(utils->conn, SASL_LOG_FAIL, "%s", out);
     } else {
-        utils->seterror(utils->conn, 0, out);
+        utils->seterror(utils->conn, 0, "%s", out);
     }
     utils->free(out);
 

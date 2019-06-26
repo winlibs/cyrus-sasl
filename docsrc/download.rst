@@ -5,4 +5,6 @@ Download
 
 .. toctree::
 
-    sasl/installation
+    getsasl
+    sasl/release-notes/index
+    packager

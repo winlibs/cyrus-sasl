@@ -2,7 +2,7 @@
  * Rob Earhart
  */
 /* 
- * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
+ * Copyright (c) 1998-2016 Carnegie Mellon University.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -20,12 +20,13 @@
  *    endorse or promote products derived from this software without
  *    prior written permission. For permission or any other legal
  *    details, please contact  
- *      Office of Technology Transfer
  *      Carnegie Mellon University
- *      5000 Forbes Avenue
- *      Pittsburgh, PA  15213-3890
- *      (412) 268-4387, fax: (412) 268-7395
- *      tech-transfer@andrew.cmu.edu
+ *      Center for Technology Transfer and Enterprise Creation
+ *      4615 Forbes Avenue
+ *      Suite 302
+ *      Pittsburgh, PA  15213
+ *      (412) 268-7393, fax: (412) 268-7395
+ *      innovation@andrew.cmu.edu
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
@@ -74,8 +75,6 @@ void p_oserror (const char *string);
 char myhostname[1025];
 
 #define PW_BUF_SIZE 2048
-
-static const char build_ident[] = "$Build: saslpasswd " PACKAGE "-" VERSION " $";
 
 const char *progname = NULL;
 char *sasldb_path = NULL;
@@ -266,7 +265,7 @@ main(int argc, char *argv[])
   int c;
   char *userid;
   char *password = NULL;
-  char *verify;
+  char *verify = NULL;
   unsigned passlen = 0;
   unsigned verifylen;
   const char *errstr = NULL;
@@ -407,10 +406,13 @@ main(int argc, char *argv[])
 		  &verifylen);
 	  if (passlen != verifylen
 	      || memcmp(password, verify, verifylen)) {
+	      free(verify);
+	      free(password);
 	      fprintf(stderr, "%s: passwords don't match; aborting\n", 
 		      progname);
 	      exit(-(SASL_BADPARAM));
 	  }
+	  free(verify);
       }
   }
 
@@ -422,6 +424,7 @@ main(int argc, char *argv[])
 			(flag_create ? SASL_SET_CREATE : 0)
 			| (flag_disable ? SASL_SET_DISABLE : 0)
 			| (flag_nouserpass ? SASL_SET_NOPLAIN : 0));
+  free(password);
 
   if (result != SASL_OK && !flag_disable)
       exit_sasl(result, NULL);

@@ -1,10 +1,9 @@
 /* saslutil.c
  * Rob Siemborski
  * Tim Martin
- * $Id: saslutil.c,v 1.52 2011/09/22 14:43:01 mel Exp $
  */
 /* 
- * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
+ * Copyright (c) 1998-2016 Carnegie Mellon University.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -22,12 +21,13 @@
  *    endorse or promote products derived from this software without
  *    prior written permission. For permission or any other legal
  *    details, please contact  
- *      Office of Technology Transfer
  *      Carnegie Mellon University
- *      5000 Forbes Avenue
- *      Pittsburgh, PA  15213-3890
- *      (412) 268-4387, fax: (412) 268-7395
- *      tech-transfer@andrew.cmu.edu
+ *      Center for Technology Transfer and Enterprise Creation
+ *      4615 Forbes Avenue
+ *      Suite 302
+ *      Pittsburgh, PA  15213
+ *      (412) 268-7393, fax: (412) 268-7395
+ *      innovation@andrew.cmu.edu
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
@@ -43,13 +43,12 @@
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <config.h>
-#include <stdio.h>
-
 #if defined(WIN32)
 #define _CRT_RAND_S
 #endif
 
+#include <config.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -79,11 +78,6 @@
  * sasl_churn
  * sasl_erasebuffer
  */
-
-#ifdef sun
-/* gotta define gethostname ourselves on suns */
-extern int gethostname(char *, int);
-#endif
 
 char *encode_table;
 char *decode_table;
@@ -286,9 +280,9 @@ int sasl_mkchal(sasl_conn_t *conn,
   time(&now);
 
   if (hostflag && conn->serverFQDN)
-    snprintf(buf,maxlen, "<%lu.%lu@%s>", randnum, now, conn->serverFQDN);
+    snprintf(buf,maxlen, "<%lu.%lu@%s>", randnum, (unsigned long)now, conn->serverFQDN); /* don't care much about time 32bit overlap */
   else
-    snprintf(buf,maxlen, "<%lu.%lu>", randnum, now);
+    snprintf(buf,maxlen, "<%lu.%lu>", randnum, (unsigned long)now);
 
   return (int) strlen(buf);
 }
@@ -307,7 +301,7 @@ int sasl_utf8verify(const char *str, unsigned len)
     if (seqlen == 1) return SASL_BADPROT; /* this shouldn't happen here */
     if (seqlen > 6) return SASL_BADPROT; /* illegal */
     while (--seqlen)
-      if ((str[++i] & 0xC0) != 0xF0) return SASL_BADPROT; /* needed a 10 octet */
+      if ((str[++i] & 0xC0) != 0x80) return SASL_BADPROT; /* needed a 10 octet */
   }
   return SASL_OK;
 }      

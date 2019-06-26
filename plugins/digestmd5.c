@@ -3,10 +3,9 @@
  * Rob Siemborski
  * Tim Martin
  * Alexey Melnikov 
- * $Id: digestmd5.c,v 1.205 2011/05/13 19:18:37 murch Exp $
  */
 /* 
- * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
+ * Copyright (c) 1998-2016 Carnegie Mellon University.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -24,12 +23,13 @@
  *    endorse or promote products derived from this software without
  *    prior written permission. For permission or any other legal
  *    details, please contact  
- *      Office of Technology Transfer
  *      Carnegie Mellon University
- *      5000 Forbes Avenue
- *      Pittsburgh, PA  15213-3890
- *      (412) 268-4387, fax: (412) 268-7395
- *      tech-transfer@andrew.cmu.edu
+ *      Center for Technology Transfer and Enterprise Creation
+ *      4615 Forbes Avenue
+ *      Suite 302
+ *      Pittsburgh, PA  15213
+ *      (412) 268-7393, fax: (412) 268-7395
+ *      innovation@andrew.cmu.edu
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
@@ -101,11 +101,6 @@ extern int strcasecmp(const char *s1, const char *s2);
 
 /* external definitions */
 
-#ifdef sun
-/* gotta define gethostname ourselves on suns */
-extern int      gethostname(char *, int);
-#endif
-
 #define bool int
 
 #ifndef TRUE
@@ -121,8 +116,6 @@ extern int      gethostname(char *, int);
 #define MAX_SASL_BUFSIZE    0xFFFFFF
 
 /*****************************  Common Section  *****************************/
-
-static const char plugin_id[] = "$Id: digestmd5.c,v 1.205 2011/05/13 19:18:37 murch Exp $";
 
 /* Definitions */
 #define NONCE_SIZE (32)		/* arbitrary */
@@ -557,6 +550,8 @@ static int add_to_challenge(const sasl_utils_t *utils,
 	/* Check if the value needs quoting */
 	if (strpbrk ((char *)value, NEED_ESCAPING) != NULL) {
 	    char * quoted = quote ((char *) value);
+	    if (quoted == NULL)
+		MEMERROR(utils);
 	    valuesize = strlen(quoted);
 	    /* As the quoted string is bigger, make sure we have enough
 	       space now */
@@ -763,6 +758,9 @@ static char *quote (char *str)
     }
 
     result = malloc (strlen(str) + num_to_escape + 1);
+    if (result == NULL) {
+        return NULL;
+    }
     for (p = str, outp = result; *p; p++) {
 	if (*p == '"' || *p == '\\') {
 	    *outp = '\\';
@@ -1394,7 +1392,7 @@ static int digestmd5_encode(void *context,
     struct buffer_info *inblob, bufinfo;
     
     if(!context || !invec || !numiov || !output || !outputlen) {
-	PARAMERROR(text->utils);
+	if (text) PARAMERROR(text->utils);
 	return SASL_BADPARAM;
     }
     
@@ -1903,7 +1901,7 @@ static int digestmd5_server_mech_new(void *glob_context,
     text = sparams->utils->malloc(sizeof(server_context_t));
     if (text == NULL)
 	return SASL_NOMEM;
-    memset(text, 0, sizeof(server_context_t));
+    memset((server_context_t *)text, 0, sizeof(server_context_t));
     
     text->state = 1;
     text->i_am = SERVER;
@@ -1963,6 +1961,8 @@ digestmd5_server_mech_step1(server_context_t *stext,
 		strcat(qop, "auth-conf");
 		added_conf = 1;
 	    }
+	    if (strlen(cipheropts) + strlen(cipher->name) + 1 >= 1024)
+		return SASL_FAIL;
 	    if (*cipheropts) strcat(cipheropts, ",");
 	    strcat(cipheropts, cipher->name);
 	}
@@ -2185,7 +2185,9 @@ static int digestmd5_server_mech_step2(server_context_t *stext,
 
     /* password prop_request */
     const char *password_request[] = { SASL_AUX_PASSWORD,
+#if defined(OBSOLETE_DIGEST_ATTR)
 				       "*cmusaslsecretDIGEST-MD5",
+#endif
 				       NULL };
     size_t len;
     struct propval auxprop_values[2];
@@ -2451,7 +2453,7 @@ static int digestmd5_server_mech_step2(server_context_t *stext,
 #endif
     }
 
-    if (!text->nonce && text->reauth->timeout) {
+    if (!text->nonce && text->reauth->timeout && text->reauth->size > 0) {
 	unsigned val = hash((char *) nonce) % text->reauth->size;
 
 	/* reauth attempt or continuation of HTTP Digest on a
@@ -2586,8 +2588,11 @@ static int digestmd5_server_mech_step2(server_context_t *stext,
     result = sparams->utils->prop_getnames(sparams->propctx, password_request,
 					   auxprop_values);
     if (result < 0 ||
-       ((!auxprop_values[0].name || !auxprop_values[0].values) &&
-	(!auxprop_values[1].name || !auxprop_values[1].values))) {
+        ((!auxprop_values[0].name || !auxprop_values[0].values)
+#if defined(OBSOLETE_DIGEST_ATTR)
+         && (!auxprop_values[1].name || !auxprop_values[1].values)
+#endif
+         )) {
 	/* We didn't find this username */
 	sparams->utils->seterror(sparams->utils->conn, 0,
 				 "no secret in database");
@@ -2657,11 +2662,13 @@ static int digestmd5_server_mech_step2(server_context_t *stext,
 	
 	/* We're done with sec now. Let's get rid of it */
 	_plug_free_secret(sparams->utils, &sec);
+#if defined(OBSOLETE_DIGEST_ATTR)
     } else if (auxprop_values[1].name && auxprop_values[1].values) {
         /* NB: This will most likely fail for clients that
 	   choose to ignore server-advertised realm */
 	memcpy(Secret, auxprop_values[1].values[0], HASHLEN);
 	Secret[HASHLEN] = '\0';
+#endif
     } else {
 	sparams->utils->seterror(sparams->utils->conn, 0,
 				 "Have neither type of secret");
@@ -4212,7 +4219,7 @@ static int digestmd5_client_mech_new(void *glob_context,
     text = params->utils->malloc(sizeof(client_context_t));
     if (text == NULL)
 	return SASL_NOMEM;
-    memset(text, 0, sizeof(client_context_t));
+    memset((client_context_t *)text, 0, sizeof(client_context_t));
     
     text->state = 1;
     text->i_am = CLIENT;
@@ -4546,6 +4553,8 @@ static int digestmd5_client_mech_step(void *conn_context,
 	text->realm = NULL;
 	text->nonce = text->cnonce = NULL;
 	ctext->cipher = NULL;
+
+        GCC_FALLTHROUGH
     
     case 2:
 	return digestmd5_client_mech_step2(ctext, params,

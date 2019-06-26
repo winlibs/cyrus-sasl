@@ -81,8 +81,6 @@ int main(int argc, char **argv) {
 	int		dump_stat_info = 0;
 	char   		*file = NULL;
 	int		file_fd;
-	int		shmid = 0;
-	char		shmid_buff[256];
 	char		cache_magic[64];
 	struct stat 	stat_buff;
 
@@ -137,7 +135,7 @@ int main(int argc, char **argv) {
 	}
 
 	table_stats = shm_base + 64;
-	(char *)table = (char *)table_stats + 128;
+	table = (void *)((char *)table_stats + 128);
 
 	if (dump_stat_info == 0 && dump_user_info == 0)
 		dump_stat_info = 1;

@@ -1,6 +1,5 @@
 /* NTLM SASL plugin
  * Ken Murchison
- * $Id: ntlm.c,v 1.37 2011/11/08 17:31:55 murch Exp $
  *
  * References:
  *   http://www.innovation.ch/java/ntlm.html
@@ -8,7 +7,7 @@
  *   http://www.ubiqx.org/cifs/rfc-draft/draft-leach-cifs-v1-spec-02.html
  */
 /* 
- * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
+ * Copyright (c) 1998-2016 Carnegie Mellon University.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,12 +25,13 @@
  *    endorse or promote products derived from this software without
  *    prior written permission. For permission or any other legal
  *    details, please contact  
- *      Office of Technology Transfer
  *      Carnegie Mellon University
- *      5000 Forbes Avenue
- *      Pittsburgh, PA  15213-3890
- *      (412) 268-4387, fax: (412) 268-7395
- *      tech-transfer@andrew.cmu.edu
+ *      Center for Technology Transfer and Enterprise Creation
+ *      4615 Forbes Avenue
+ *      Suite 302
+ *      Pittsburgh, PA  15213
+ *      (412) 268-7393, fax: (412) 268-7395
+ *      innovation@andrew.cmu.edu
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
@@ -73,6 +73,10 @@
   typedef int SOCKET;
 #endif /* WIN32 */
 
+#ifndef sasl_getpid /* for some reason VS doesn't like #define getpid */
+# define sasl_getpid getpid
+#endif
+
 #include <openssl/md4.h>
 #include <openssl/md5.h>
 #include <openssl/hmac.h>
@@ -92,6 +96,9 @@
 	 DES_ecb_encrypt((i),(o),&(k),(e))
 #endif /* OpenSSL 0.9.7+ w/o old DES support */
 
+/* for legacy libcrypto support */
+#include "crypto-compat.h"
+
 #include <sasl.h>
 #define MD5_H  /* suppress internal MD5 */
 #include <saslplug.h>
@@ -99,8 +106,6 @@
 #include "plugin_common.h"
 
 /*****************************  Common Section  *****************************/
-
-static const char plugin_id[] = "$Id: ntlm.c,v 1.37 2011/11/08 17:31:55 murch Exp $";
 
 #ifdef WIN32
 static ssize_t writev (SOCKET fd, const struct iovec *iov, size_t iovcnt);
@@ -473,9 +478,11 @@ static unsigned char *V2(unsigned char *V2, sasl_secret_t *passwd,
 	ucase(upper, len);
 	to_unicode((unsigned char *) *buf, upper, len);
 
-	HMAC(EVP_md5(), hash, MD4_DIGEST_LENGTH, (unsigned char *) *buf, 2 * len, hash, &len);
+	HMAC(EVP_md5(), hash, MD4_DIGEST_LENGTH,
+             (unsigned char *) *buf, 2 * len, hash, &len);
 
 	/* V2 = HMAC-MD5(NTLMv2hash, challenge + blob) + blob */
+        HMAC_CTX_reset(ctx);
 	HMAC_Init_ex(ctx, hash, len, EVP_md5(), NULL);
 	HMAC_Update(ctx, challenge, NTLM_NONCE_LENGTH);
 	HMAC_Update(ctx, blob, bloblen);
@@ -993,7 +1000,7 @@ static int smb_negotiate_protocol(const sasl_utils_t *utils,
     hdr.flags2 = SMB_FLAGS2_ERR_STATUS;
     if (text->flags & NTLM_USE_UNICODE) hdr.flags2 |= SMB_FLAGS2_UNICODE;
 #endif
-    current_pid = getpid();
+    current_pid = sasl_getpid();
     if (sizeof(current_pid) <= 2) {
 	hdr.pid = (uint16) current_pid;
 	hdr.PidHigh = 0;
@@ -1079,7 +1086,7 @@ static int smb_negotiate_protocol(const sasl_utils_t *utils,
 	|| hdr.status				 /* no errors */
 	|| !(hdr.flags & SMB_FLAGS_SERVER_TO_REDIR)) { /* response */
 	utils->log(NULL, SASL_LOG_ERR,
-		   "NTLM: error in NEGPROT response header: %ld",
+		   "NTLM: error in NEGPROT response header: %u",
 		   hdr.status);
 	return SASL_FAIL;
     }
@@ -1138,7 +1145,7 @@ static int smb_negotiate_protocol(const sasl_utils_t *utils,
     /* if client asked for target, send domain */
     if (text->flags & NTLM_ASK_TARGET) {
 	*domain = utils->malloc(len);
-	if (domain == NULL) {
+	if (*domain == NULL) {
 	    MEMERROR(utils);
 	    return SASL_NOMEM;
 	}
@@ -1184,7 +1191,7 @@ static int smb_session_setup(const sasl_utils_t *utils, server_context_t *text,
     hdr.flags2 = SMB_FLAGS2_ERR_STATUS;
     if (text->flags & NTLM_USE_UNICODE) hdr.flags2 |= SMB_FLAGS2_UNICODE;
 #endif
-    current_pid = getpid();
+    current_pid = sasl_getpid();
     if (sizeof(current_pid) <= 2) {
 	hdr.pid = (uint16) current_pid;
 	hdr.PidHigh = 0;
@@ -1308,7 +1315,7 @@ static int smb_session_setup(const sasl_utils_t *utils, server_context_t *text,
     /* check auth success */
     if (hdr.status) {
 	utils->log(NULL, SASL_LOG_ERR,
-		   "NTLM: auth failure: %ld", hdr.status);
+		   "NTLM: auth failure: %u", hdr.status);
 	return SASL_BADAUTH;
     }
 
@@ -1395,6 +1402,13 @@ static int ntlm_server_mech_new(void *glob_context __attribute__((unused)),
     unsigned int len;
     SOCKET sock = (SOCKET) -1;
 
+    /* holds state are in: allocate early */
+    text = sparams->utils->malloc(sizeof(server_context_t));
+    if (text == NULL) {
+	MEMERROR( sparams->utils );
+	return SASL_NOMEM;
+    }
+
     sparams->utils->getopt(sparams->utils->getopt_context,
 			   "NTLM", "ntlm_server", &serv, &len);
     if (serv) {
@@ -1423,13 +1437,6 @@ static int ntlm_server_mech_new(void *glob_context __attribute__((unused)),
 
 	sparams->utils->free(tmp);
 	if (sock == (SOCKET) -1) return SASL_UNAVAIL;
-    }
-    
-    /* holds state are in */
-    text = sparams->utils->malloc(sizeof(server_context_t));
-    if (text == NULL) {
-	MEMERROR( sparams->utils );
-	return SASL_NOMEM;
     }
     
     memset(text, 0, sizeof(server_context_t));

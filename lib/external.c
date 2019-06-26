@@ -1,10 +1,9 @@
 /* SASL server API implementation
  * Rob Siemborski
  * Tim Martin
- * $Id: external.c,v 1.24 2009/03/10 16:27:52 mel Exp $
  */
 /* 
- * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
+ * Copyright (c) 1998-2016 Carnegie Mellon University.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -22,12 +21,13 @@
  *    endorse or promote products derived from this software without
  *    prior written permission. For permission or any other legal
  *    details, please contact  
- *      Office of Technology Transfer
  *      Carnegie Mellon University
- *      5000 Forbes Avenue
- *      Pittsburgh, PA  15213-3890
- *      (412) 268-4387, fax: (412) 268-7395
- *      tech-transfer@andrew.cmu.edu
+ *      Center for Technology Transfer and Enterprise Creation
+ *      4615 Forbes Avenue
+ *      Suite 302
+ *      Pittsburgh, PA  15213
+ *      (412) 268-7393, fax: (412) 268-7395
+ *      innovation@andrew.cmu.edu
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
@@ -53,11 +53,9 @@
 #include <saslplug.h>
 #include "saslint.h"
 
-#include "../plugins/plugin_common.h"
+#include "../common/plugin_common.h"
 
 /*****************************  Common Section  *****************************/
-
-static const char plugin_id[] = "$Id: external.c,v 1.24 2009/03/10 16:27:52 mel Exp $";
 
 /*****************************  Server Section  *****************************/
 
@@ -296,8 +294,7 @@ external_client_mech_step(void *conn_context,
 	/* make the prompt list */
 	int result =
 	    _plug_make_prompts(params->utils, prompt_need,
-			       user_result == SASL_INTERACT ?
-			       "Please enter your authorization name" : NULL,
+			       "Please enter your authorization name",
 			       "",
 			       NULL, NULL,
 			       NULL, NULL,

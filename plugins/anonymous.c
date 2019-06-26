@@ -1,10 +1,9 @@
 /* Anonymous SASL plugin
  * Rob Siemborski
  * Tim Martin 
- * $Id: anonymous.c,v 1.53 2009/02/13 14:46:47 mel Exp $
  */
 /* 
- * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
+ * Copyright (c) 1998-2016 Carnegie Mellon University.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -22,12 +21,13 @@
  *    endorse or promote products derived from this software without
  *    prior written permission. For permission or any other legal
  *    details, please contact  
- *      Office of Technology Transfer
  *      Carnegie Mellon University
- *      5000 Forbes Avenue
- *      Pittsburgh, PA  15213-3890
- *      (412) 268-4387, fax: (412) 268-7395
- *      tech-transfer@andrew.cmu.edu
+ *      Center for Technology Transfer and Enterprise Creation
+ *      4615 Forbes Avenue
+ *      Suite 302
+ *      Pittsburgh, PA  15213
+ *      (412) 268-7393, fax: (412) 268-7395
+ *      innovation@andrew.cmu.edu
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
@@ -59,8 +59,6 @@
 #endif 
 
 /*****************************  Common Section  *****************************/
-
-static const char plugin_id[] = "$Id: anonymous.c,v 1.53 2009/02/13 14:46:47 mel Exp $";
 
 static const char anonymous_id[] = "anonymous";
 
@@ -100,7 +98,7 @@ anonymous_server_mech_step(void *conn_context __attribute__((unused)),
 	|| !serverout
 	|| !serveroutlen
 	|| !oparams) {
-	PARAMERROR( sparams->utils );
+	if (sparams) PARAMERROR( sparams->utils );
 	return SASL_BADPARAM;
     }
     
@@ -244,7 +242,7 @@ anonymous_client_mech_step(void *conn_context,
 	|| !clientout
 	|| !clientoutlen
 	|| !oparams) {
-	PARAMERROR( cparams->utils );
+	if (cparams) PARAMERROR( cparams->utils );
 	return SASL_BADPARAM;
     }
     
@@ -283,8 +281,7 @@ anonymous_client_mech_step(void *conn_context,
 	/* make the prompt list */
 	result =
 	    _plug_make_prompts(cparams->utils, prompt_need,
-			       user_result == SASL_INTERACT ?
-			       "Please enter anonymous identification" : NULL,
+			       "Please enter anonymous identification",
 			       "",
 			       NULL, NULL,
 			       NULL, NULL,

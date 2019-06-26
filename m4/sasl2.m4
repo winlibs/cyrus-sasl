@@ -17,6 +17,7 @@ AC_ARG_WITH([gss_impl],
             [gss_impl=$withval],
             [gss_impl=auto])
 
+gs2="no"
 if test "$gssapi" != no; then
   platform=
   case "${host}" in
@@ -36,6 +37,9 @@ if test "$gssapi" != no; then
     *-*-aix*)
 ###_AIX
       platform=__aix
+      ;;
+    *-*-darwin*)
+      platform=__darwin
       ;;
     *)
       AC_WARN([The system type is not recognized. If you believe that CyberSafe GSSAPI works on this platform, please update the configure script])
@@ -72,8 +76,10 @@ if test "$gssapi" != no; then
 fi
 
 if test "$gssapi" != no; then
-  if test "$ac_cv_header_gssapi_h" = "yes" -o "$ac_cv_header_gssapi_gssapi_h" = "yes"; then
+  if test "$ac_cv_header_gssapi_h" = "yes"; then
     AC_DEFINE(HAVE_GSSAPI_H,,[Define if you have the gssapi.h header file])
+  elif test "$ac_cv_header_gssapi_gssapi_h" = "yes"; then
+    AC_DEFINE(HAVE_GSSAPI_GSSAPI_H,,[Define if you have the gssapi/gssapi.h header file])
   fi
 
   # We need to find out which gssapi implementation we are
@@ -110,12 +116,9 @@ if test "$gssapi" != no; then
   fi
 
   if test "$gss_impl" = "auto" -o "$gss_impl" = "mit"; then
-    # check for libkrb5support first
-    AC_CHECK_LIB(krb5support,krb5int_getspecific,K5SUP=-lkrb5support K5SUPSTATIC=$gssapi_dir/libkrb5support.a,,${LIB_SOCKET})
-
     gss_failed=0
     AC_CHECK_LIB(gssapi_krb5,gss_unwrap,gss_impl="mit",gss_failed=1,
-                 ${GSSAPIBASE_LIBS} -lgssapi_krb5 -lkrb5 -lk5crypto -lcom_err ${K5SUP} ${LIB_SOCKET})
+                 ${GSSAPIBASE_LIBS} -lgssapi_krb5 -lkrb5 -lk5crypto -lcom_err ${LIB_SOCKET})
     if test "$gss_impl" != "auto" -a "$gss_failed" = "1"; then
       gss_impl="failed"
     fi
@@ -167,10 +170,10 @@ if test "$gssapi" != no; then
   fi
 
   if test "$gss_impl" = "mit"; then
-    GSSAPIBASE_LIBS="$GSSAPIBASE_LIBS -lgssapi_krb5 -lkrb5 -lk5crypto -lcom_err ${K5SUP}"
-    GSSAPIBASE_STATIC_LIBS="$GSSAPIBASE_LIBS $gssapi_dir/libgssapi_krb5.a $gssapi_dir/libkrb5.a $gssapi_dir/libk5crypto.a $gssapi_dir/libcom_err.a ${K5SUPSTATIC}"
+    GSSAPIBASE_LIBS="$GSSAPIBASE_LIBS -lgssapi_krb5 -lkrb5 -lk5crypto -lcom_err"
+    GSSAPIBASE_STATIC_LIBS="$GSSAPIBASE_LIBS $gssapi_dir/libgssapi_krb5.a $gssapi_dir/libkrb5.a $gssapi_dir/libk5crypto.a $gssapi_dir/libcom_err.a"
   elif test "$gss_impl" = "heimdal"; then
-    CPPFLAGS="$CPPFLAGS -DKRB5_HEIMDAL"
+    CPPFLAGS="$CPPFLAGS"
     GSSAPIBASE_LIBS="$GSSAPIBASE_LIBS -lgssapi -lkrb5 -lasn1 -lroken ${LIB_CRYPT} ${LIB_DES} -lcom_err"
     GSSAPIBASE_STATIC_LIBS="$GSSAPIBASE_STATIC_LIBS $gssapi_dir/libgssapi.a $gssapi_dir/libkrb5.a $gssapi_dir/libasn1.a $gssapi_dir/libroken.a $gssapi_dir/libcom_err.a ${LIB_CRYPT}"
   elif test "$gss_impl" = "cybersafe03"; then
@@ -258,6 +261,7 @@ if test "$gssapi" != no; then
   SASL_STATIC_OBJS="$SASL_STATIC_OBJS gssapi.o"
   SASL_STATIC_SRCS="$SASL_STATIC_SRCS \$(top_srcdir)/plugins/gssapi.c"
   if test "$rfc5587" = "yes" -a "$rfc5801" = "yes"; then
+    gs2="yes"
     SASL_MECHS="$SASL_MECHS libgs2.la"
     SASL_STATIC_OBJS="$SASL_STATIC_OBJS gs2.o"
     SASL_STATIC_SRCS="$SASL_STATIC_SRCS \$(top_srcdir)/plugins/gs2.c"
@@ -290,6 +294,26 @@ if test "$gssapi" != no; then
 
   cmu_save_LIBS="$LIBS"
   LIBS="$LIBS $GSSAPIBASE_LIBS"
+  AC_CHECK_FUNCS(gss_inquire_sec_context_by_oid)
+  if test "$ac_cv_func_gss_inquire_sec_context_by_oid" = no ; then
+    if test "$ac_cv_header_gssapi_gssapi_ext_h" = "yes"; then
+      AC_CHECK_DECL(gss_inquire_sec_context_by_oid,
+                    [AC_DEFINE(HAVE_GSS_INQUIRE_SEC_CONTEXT_BY_OID,1,
+                               [Define if your GSSAPI implementation defines gss_inquire_sec_context_by_oid])],,
+                    [
+                    AC_INCLUDES_DEFAULT
+                    #include <gssapi/gssapi_ext.h>
+                    ])
+    fi
+  fi
+  if test "$ac_cv_header_gssapi_gssapi_ext_h" = "yes"; then
+    AC_EGREP_HEADER(GSS_C_SEC_CONTEXT_SASL_SSF, gssapi/gssapi_ext.h,
+                    [AC_DEFINE(HAVE_GSS_C_SEC_CONTEXT_SASL_SSF,,
+                               [Define if your GSSAPI implementation defines GSS_C_SEC_CONTEXT_SASL_SSF])])
+  fi
+  cmu_save_LIBS="$LIBS"
+  LIBS="$LIBS $GSSAPIBASE_LIBS"
+
   AC_MSG_CHECKING([for SPNEGO support in GSSAPI libraries])
   AC_TRY_RUN([
 #ifdef HAVE_GSSAPI_H
