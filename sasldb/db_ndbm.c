@@ -1,10 +1,9 @@
 /* db_ndbm.c--SASL ndbm interface
  * Rob Siemborski
  * Rob Earhart
- * $Id: db_ndbm.c,v 1.5 2003/02/13 19:56:14 rjs3 Exp $
  */
 /*
- * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
+ * Copyright (c) 1998-2016 Carnegie Mellon University.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -22,12 +21,13 @@
  *    endorse or promote products derived from this software without
  *    prior written permission. For permission or any other legal
  *    details, please contact  
- *      Office of Technology Transfer
  *      Carnegie Mellon University
- *      5000 Forbes Avenue
- *      Pittsburgh, PA  15213-3890
- *      (412) 268-4387, fax: (412) 268-7395
- *      tech-transfer@andrew.cmu.edu
+ *      Center for Technology Transfer and Enterprise Creation
+ *      4615 Forbes Avenue
+ *      Suite 302
+ *      Pittsburgh, PA  15213
+ *      (412) 268-7393, fax: (412) 268-7395
+ *      innovation@andrew.cmu.edu
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
@@ -50,6 +50,7 @@
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <errno.h>
 #include "sasldb.h"
 
 static int db_ok = 0;
@@ -101,7 +102,8 @@ int _sasldb_getdata(const sasl_utils_t *utils,
   }
   db = dbm_open(path, O_RDONLY, S_IRUSR | S_IWUSR);
   if (! db) {
-      utils->seterror(cntxt, 0, "Could not open db");
+      utils->seterror(cntxt, 0, "Could not open db `%s': %s",
+		      path, strerror(errno));
       result = SASL_FAIL;
       goto cleanup;
   }
@@ -110,8 +112,8 @@ int _sasldb_getdata(const sasl_utils_t *utils,
   dvalue = dbm_fetch(db, dkey);
   if (! dvalue.dptr) {
       utils->seterror(cntxt, SASL_NOLOG,
-		      "user: %s@%s property: %s not found in sasldb",
-		      authid, realm, propName);
+		      "user: %s@%s property: %s not found in sasldb %s",
+		      authid, realm, propName, path);
       result = SASL_NOUSER;
       goto cleanup;
   }
@@ -184,10 +186,11 @@ int _sasldb_putdata(const sasl_utils_t *utils,
 		O_RDWR | O_CREAT,
 		S_IRUSR | S_IWUSR);
   if (! db) {
+      utils->seterror(conn, 0, "Could not open db `%s' for writing: %s",
+		      path, strerror(errno));
       utils->log(conn, SASL_LOG_ERR,
 		 "SASL error opening password file. "
 		 "Do you have write permissions?\n");
-      utils->seterror(conn, 0, "Could not open db for write");
       result = SASL_FAIL;
       goto cleanup;
   }
@@ -200,13 +203,17 @@ int _sasldb_putdata(const sasl_utils_t *utils,
     dvalue.dsize = data_len;
     if (dbm_store(db, dkey, dvalue, DBM_REPLACE)) {
 	utils->seterror(conn, 0,
-			"Couldn't update db");
+			"Couldn't update record for %s@%s property %s "
+			"in db %s: %s", authid, realm, propName, path,
+			strerror(errno));
 	result = SASL_FAIL;
     }
   } else {
       if (dbm_delete(db, dkey)) {
 	  utils->seterror(conn, 0,
-			  "Couldn't update db");
+			  "Couldn't delete record for %s@%s property %s "
+			  "in db %s: %s", authid, realm, propName, path,
+			  strerror(errno));
 	  result = SASL_NOUSER;
       }
   }
@@ -325,7 +332,8 @@ sasldb_handle _sasldb_getkeyhandle(const sasl_utils_t *utils,
     db = dbm_open(path, O_RDONLY, S_IRUSR | S_IWUSR);
 
     if(!db) {
-	utils->seterror(conn, 0, "Could not open db");
+	utils->seterror(conn, 0, "Could not open db `%s': %s",
+			path, strerror(errno));
 	return NULL;
     }
 

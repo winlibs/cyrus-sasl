@@ -1,10 +1,9 @@
 /* dlopen.c--Unix dlopen() dynamic loader interface
  * Rob Siemborski
  * Rob Earhart
- * $Id: dlopen.c,v 1.52 2009/04/11 10:21:43 mel Exp $
  */
 /* 
- * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
+ * Copyright (c) 1998-2016 Carnegie Mellon University.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -22,12 +21,13 @@
  *    endorse or promote products derived from this software without
  *    prior written permission. For permission or any other legal
  *    details, please contact  
- *      Office of Technology Transfer
  *      Carnegie Mellon University
- *      5000 Forbes Avenue
- *      Pittsburgh, PA  15213-3890
- *      (412) 268-4387, fax: (412) 268-7395
- *      tech-transfer@andrew.cmu.edu
+ *      Center for Technology Transfer and Enterprise Creation
+ *      4615 Forbes Avenue
+ *      Suite 302
+ *      Pittsburgh, PA  15213
+ *      (412) 268-7393, fax: (412) 268-7395
+ *      innovation@andrew.cmu.edu
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
@@ -157,9 +157,8 @@ char *dlerror()
 #else
 #define SO_SUFFIX	".sl"
 #endif /* __ia64 */
-#elif defined(__APPLE__)
-#define SO_SUFFIX	".plugin"
-#else /* __APPLE__ */
+
+#else /* __hpux */
 #define SO_SUFFIX	".so"
 #endif
 
@@ -271,6 +270,8 @@ static int _parse_la(const char *prefix, const char *in, char *out)
     if (strcmp(in + (length - strlen(LA_SUFFIX)), LA_SUFFIX)) {
 	if(!strcmp(in + (length - strlen(SO_SUFFIX)),SO_SUFFIX)) {
 	    /* check for a .la file */
+	    if (strlen(prefix) + strlen(in) + strlen(LA_SUFFIX) + 1 >= MAX_LINE)
+		return SASL_BADPARAM;
 	    strcpy(line, prefix);
 	    strcat(line, in);
 	    length = strlen(line);
@@ -283,11 +284,15 @@ static int _parse_la(const char *prefix, const char *in, char *out)
 		return SASL_FAIL;
 	    }
 	}
+        if (strlen(prefix) + strlen(in) + 1 >= PATH_MAX)
+            return SASL_BADPARAM;
 	strcpy(out, prefix);
 	strcat(out, in);
 	return SASL_OK;
     }
 
+    if (strlen(prefix) + strlen(in) + 1 >= MAX_LINE)
+        return SASL_BADPARAM;
     strcpy(line, prefix);
     strcat(line, in);
 
@@ -303,6 +308,7 @@ static int _parse_la(const char *prefix, const char *in, char *out)
 	if(line[strlen(line) - 1] != '\n') {
 	    _sasl_log(NULL, SASL_LOG_WARN,
 		      "LA file has too long of a line: %s", in);
+	    fclose(file);
 	    return SASL_BUFOVER;
 	}
 	if(line[0] == '\n' || line[0] == '#') continue;
@@ -322,6 +328,7 @@ static int _parse_la(const char *prefix, const char *in, char *out)
 		if(ntmp == end) {
 		    _sasl_log(NULL, SASL_LOG_DEBUG,
 			      "dlname is empty in .la file: %s", in);
+		    fclose(file);
 		    return SASL_FAIL;
 		}
 		strcpy(out, prefix);

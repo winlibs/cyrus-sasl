@@ -3,11 +3,10 @@
  * Rob Siemborski
  * Tim Martin
  * split from common.c by Rolf Braun
- * $Id: seterror.c,v 1.10 2011/09/01 14:12:53 mel Exp $
  */
 
 /* 
- * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
+ * Copyright (c) 1998-2016 Carnegie Mellon University.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -25,12 +24,13 @@
  *    endorse or promote products derived from this software without
  *    prior written permission. For permission or any other legal
  *    details, please contact  
- *      Office of Technology Transfer
  *      Carnegie Mellon University
- *      5000 Forbes Avenue
- *      Pittsburgh, PA  15213-3890
- *      (412) 268-4387, fax: (412) 268-7395
- *      tech-transfer@andrew.cmu.edu
+ *      Center for Technology Transfer and Enterprise Creation
+ *      4615 Forbes Avenue
+ *      Suite 302
+ *      Pittsburgh, PA  15213
+ *      (412) 268-7393, fax: (412) 268-7395
+ *      innovation@andrew.cmu.edu
  *
  * 4. Redistributions of any form whatsoever must retain the following
  *    acknowledgment:
@@ -147,7 +147,7 @@ void sasl_seterror(sasl_conn_t *conn,
     {
       result = _buf_alloc(error_buf, error_buf_len, outlen+1);
       if (result != SASL_OK)
-	return;
+	goto done;
       (*error_buf)[outlen]=fmt[pos];
       outlen++;
       pos++;
@@ -169,7 +169,7 @@ void sasl_seterror(sasl_conn_t *conn,
 				      &outlen, cval);
 	      
 	    if (result != SASL_OK) /* add the string */
-	      return;
+	      goto done;
 
 	    done=1;
 	    break;
@@ -177,7 +177,7 @@ void sasl_seterror(sasl_conn_t *conn,
 	  case '%': /* double % output the '%' character */
 	    result = _buf_alloc(error_buf, error_buf_len, outlen+1);
 	    if (result != SASL_OK)
-	      return;
+	      goto done;
 	    (*error_buf)[outlen]='%';
 	    outlen++;
 	    done=1;
@@ -188,7 +188,7 @@ void sasl_seterror(sasl_conn_t *conn,
 				      &outlen,
 				      strerror(va_arg(ap, int)));
 	    if (result != SASL_OK)
-	      return;
+	      goto done;
 	    done=1;
 	    break;
 
@@ -197,7 +197,7 @@ void sasl_seterror(sasl_conn_t *conn,
 			 (char *)sasl_errstring(_sasl_seterror_usererr(
 					        va_arg(ap, int)),NULL,NULL));
 	    if (result != SASL_OK)
-	      return;
+	      goto done;
 	    done=1;
 	    break;
 
@@ -211,7 +211,7 @@ void sasl_seterror(sasl_conn_t *conn,
 	    result = _sasl_add_string(error_buf, error_buf_len,
 				      &outlen, tempbuf);
 	    if (result != SASL_OK)
-	      return;
+	      goto done;
 	    done=1;
 	    break;
 
@@ -226,7 +226,7 @@ void sasl_seterror(sasl_conn_t *conn,
 	    result = _sasl_add_string(error_buf, error_buf_len,
 				      &outlen, tempbuf);
 	    if (result != SASL_OK)
-	      return;
+	      goto done;
 	    done=1;
 
 	    break;
@@ -246,8 +246,6 @@ void sasl_seterror(sasl_conn_t *conn,
 
   (*error_buf)[outlen]='\0'; /* put 0 at end */
 
-  va_end(ap);  
-
 #ifndef SASL_OSX_CFMGLUE
   if(!(flags & SASL_NOLOG)) {
       /* See if we have a logging callback... */
@@ -255,9 +253,11 @@ void sasl_seterror(sasl_conn_t *conn,
       if (result == SASL_OK && ! log_cb)
 	  result = SASL_FAIL;
       if (result != SASL_OK)
-	  return;
+	  goto done;
       
       result = log_cb(log_ctx, SASL_LOG_FAIL, conn->error_buf);
   }
 #endif /* SASL_OSX_CFMGLUE */
+done:
+  va_end(ap);
 }

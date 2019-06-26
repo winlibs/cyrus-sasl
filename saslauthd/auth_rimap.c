@@ -3,6 +3,7 @@
 
 /* COPYRIGHT
  * Copyright (c) 1998 Messaging Direct Ltd.
+ * Copyright (c) 2013 Sebastian Pipping <sebastian@pipping.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,10 +54,6 @@
  * Proxy authentication to a remote IMAP (or IMSP) server.
  * END SYNOPSIS */
 
-#ifdef __GNUC__
-#ident "$Id: auth_rimap.c,v 1.14 2011/09/22 14:39:03 mel Exp $"
-#endif
-
 /* PUBLIC DEPENDENCIES */
 #include "mechanisms.h"
 
@@ -100,6 +97,10 @@ static struct addrinfo *ai = NULL;	/* remote authentication host    */
 					   service we connect to.	 */
 #define TAG "saslauthd"			/* IMAP command tag */
 #define LOGIN_CMD (TAG " LOGIN ")	/* IMAP login command (with tag) */
+#define LOGOUT_CMD (TAG " LOGOUT")	/* IMAP logout command (with tag) */
+#define LOGIN_REPLY_GOOD (TAG " OK")	/* Expected IMAP login reply, good edition (with tag) */
+#define LOGIN_REPLY_BAD (TAG " NO")	/* Expected IMAP login reply, bad edition (with tag) */
+#define LOGIN_REPLY_CAP "* CAPABILITY"	/* Expected IMAP login reply, capabilities edition */
 #define NETWORK_IO_TIMEOUT 30		/* network I/O timeout (seconds) */
 #define RESP_LEN 1000			/* size of read response buffer  */
 
@@ -167,36 +168,11 @@ qstring (
     register const char *p1;		/* scratch pointers		*/
     register char *p2;			/* scratch pointers             */
     int len;				/* length of array to malloc    */
-    int num_quotes;			/* number of '"' chars in string*/
 
-    /* see of we have to deal with any '"' characters */
-    num_quotes = 0;
-    p1 = s;
-    while ((p1 = strchr(p1, '"')) != NULL) {
-	p1++;
-	num_quotes++;
-    }
-    
-    if (!num_quotes) {
-	/*
-	 * no double-quotes to escape, so just wrap the input string
-	 * in double-quotes and return it.
-	 */
-	len = strlen(s) + 2 + 1;
-	c = malloc(len);
-	if (c == NULL) {
-	    return NULL;
-	}
-	*c = '"';
-        *(c+1) = '\0';
-	strcat(c, s);
-	strcat(c, "\"");
-	return c;
-    }
     /*
-     * Ugh, we have to escape double quotes ...
+     * Ugh, we have to escape quoted-specials ...
      */
-    len = strlen(s) + 2 + (2*num_quotes) + 1;
+    len = 2*strlen(s) + 3;		/* assume all chars are quoted-special */
     c = malloc(len);
     if (c == NULL) {
 	return NULL;
@@ -205,8 +181,8 @@ qstring (
     p2 = c;
     *p2++ = '"';
     while (*p1) {
-	if (*p1 == '"') {
-	    *p2++ = '\\';		/* escape the '"' */
+	if (*p1 == '"' || *p1 == '\\') {
+	    *p2++ = '\\';		/* escape the quoted-special */
 	}
 	*p2++ = *p1++;
     }
@@ -287,6 +263,146 @@ auth_rimap_init (
 
 /* END FUNCTION: auth_rimap_init */
 
+typedef enum _t_login_status {
+	LOGIN_STATUS_UNKNOWN,
+
+	LOGIN_STATUS_ACCEPTED,
+	LOGIN_STATUS_REJECTED,
+	LOGIN_STATUS_MALFORMED
+} t_login_status;
+
+/* FUNCTION: warn_malformed_imap_login_reply */
+void
+warn_malformed_imap_login_reply(
+		/* PARAMETERS */
+		const char * server_reply  /* I: plaintext server reply */
+		/* END PARAMETERS */
+		)
+{
+	syslog(LOG_WARNING, "auth_rimap: unexpected response to auth request: %s", server_reply);
+}
+
+/* END FUNCTION: warn_malformed_imap_login_reply */
+
+/* FUNCTION: process_login_reply */
+
+/* SYNOPSIS
+ * Classify IMAP server reply into accepted, rejected or malformed.
+ * END SYNOPSIS */
+
+t_login_status
+process_login_reply(
+		/* PARAMETERS */
+		char * server_reply,  /* I/O: plaintext server reply */
+		const char * login    /* I  : plaintext authenticator */
+		/* END PARAMETERS */
+		)
+{
+	/* VARIABLES */
+	t_login_status res = LOGIN_STATUS_UNKNOWN;
+	char * line_first = server_reply;
+	char * line_after_last;
+	/* END VARIABLES */
+
+	for (;;) {
+		/* find line boundary */
+		line_after_last = strpbrk(line_first, "\x0a\x0d");
+		if (line_after_last == NULL) {
+			warn_malformed_imap_login_reply(line_first);
+			return LOGIN_STATUS_MALFORMED;
+		}
+
+		/* handle single line */
+		{
+			/* terminate line (reverted later) */
+			const char backup = line_after_last[0];
+			line_after_last[0] = '\0';
+
+			/* classify current line */
+			if (strncmp(line_first, LOGIN_REPLY_GOOD, sizeof(LOGIN_REPLY_GOOD) - 1) == 0) {
+				res = LOGIN_STATUS_ACCEPTED;
+			} else if (strncmp(line_first, LOGIN_REPLY_BAD, sizeof(LOGIN_REPLY_BAD) - 1) == 0) {
+				res = LOGIN_STATUS_REJECTED;
+			} else if (strncmp(line_first, LOGIN_REPLY_CAP, sizeof(LOGIN_REPLY_CAP) - 1) == 0) {
+				/* keep looking for ".. OK" or ".. NO" */
+			} else {
+				res = LOGIN_STATUS_MALFORMED;
+			}
+
+			/* report current line */
+			if (res == LOGIN_STATUS_MALFORMED) {
+				warn_malformed_imap_login_reply(line_first);
+			} else if (flags & VERBOSE) {
+				syslog(LOG_DEBUG, "auth_rimap: [%s] %s", login, line_first);
+			}
+
+			/* revert termination */
+			line_after_last[0] = backup;
+		}
+
+		/* are we done? */
+		if (res != LOGIN_STATUS_UNKNOWN) {
+			return res;
+		}
+
+		/* forward to next line */
+		while ((line_after_last[0] == '\x0a')
+				|| (line_after_last[0] == '\x0d')) {
+			line_after_last++;
+		}
+
+		/* no more lines? */
+		if (line_after_last[0] == '\0') {
+			warn_malformed_imap_login_reply("");
+			return LOGIN_STATUS_MALFORMED;
+		}
+
+		/* prepare for next round */
+		line_first = line_after_last;
+	}
+
+	assert(! "cannot be reached");
+}
+
+/* END FUNCTION: process_login_reply */
+
+
+static int read_response(int s, char *rbuf, int buflen, const char *tag)
+{
+    int rc = 0;
+
+    do {
+        /* check if there is more to read */
+        fd_set         perm;
+        int            fds, ret;
+        struct timeval timeout;
+
+        FD_ZERO(&perm);
+        FD_SET(s, &perm);
+        fds = s +1;
+
+        timeout.tv_sec  = NETWORK_IO_TIMEOUT;
+        timeout.tv_usec = 0;
+        ret = select (fds, &perm, NULL, NULL, &timeout );
+        if ( ret<=0 ) {
+            rc = ret;
+            break;
+        }
+        if ( FD_ISSET(s, &perm) ) {
+            ret = read(s, rbuf+rc, buflen-rc);
+            if ( ret<=0 ) {
+                rc = ret;
+                break;
+            } else {
+                rc += ret;
+            }
+        }
+    } while (rc < buflen &&
+             ( rbuf[rc-1] != '\n' || !memmem(rbuf, rc, tag, strlen(tag)) ));
+
+    return rc;
+}
+
 /* FUNCTION: auth_rimap */
 
 /* SYNOPSIS
@@ -316,15 +432,16 @@ auth_rimap (
     /* VARIABLES */
     int	s=-1;				/* socket to remote auth host   */
     struct addrinfo *r;			/* remote socket address info   */
-    struct iovec iov[5];		/* for sending LOGIN command    */
+    struct iovec iov[5];		/* for sending IMAP commands    */
     char *qlogin;			/* pointer to "quoted" login    */
     char *qpass;			/* pointer to "quoted" password */
     char *c;				/* scratch pointer              */
-    int rc;				/* return code scratch area     */
+    int rc, rc2;			/* return code scratch area     */
     char rbuf[RESP_LEN];		/* response read buffer         */
     char hbuf[NI_MAXHOST], pbuf[NI_MAXSERV];
     int saved_errno;
     int niflags;
+    t_login_status login_status = LOGIN_STATUS_MALFORMED;
     /* END VARIABLES */
 
     /* sanity checks */
@@ -356,6 +473,11 @@ auth_rimap (
 	       ai->ai_canonname ? ai->ai_canonname : r_host, hbuf, pbuf);
     }
     if (s < 0) {
+        if (!ai) {
+            syslog(LOG_WARNING, "auth_httpform: no address given");
+            return strdup("NO [ALERT] No address given");
+        }
+
 	if (getnameinfo(ai->ai_addr, ai->ai_addrlen, NULL, 0,
 			pbuf, sizeof(pbuf), NI_NUMERICSERV) != 0)
 	    strlcpy(pbuf, "unknown", sizeof(pbuf));
@@ -375,38 +497,18 @@ auth_rimap (
     
     /* read and parse the IMAP banner */
 
-    alarm(NETWORK_IO_TIMEOUT);
-    rc = read(s, rbuf, sizeof(rbuf));
-    alarm(0);
-    if ( rc>0 ) {
-        /* check if there is more to read */
-        fd_set         perm;
-        int            fds, ret;
-        struct timeval timeout;
-
-        FD_ZERO(&perm);
-        FD_SET(s, &perm);
-        fds = s +1;
-
-        timeout.tv_sec  = 1;
-        timeout.tv_usec = 0;
-        while( select (fds, &perm, NULL, NULL, &timeout ) >0 ) {
-           if ( FD_ISSET(s, &perm) ) {
-              ret = read(s, rbuf+rc, sizeof(rbuf)-rc);
-              if ( ret<=0 ) {
-                 rc = ret;
-                 break;
-              } else {
-                 rc += ret;
-              }
-           }
-        }
-    }
+    rc = read_response(s, rbuf, RESP_LEN, "*");
     if (rc == -1) {
 	syslog(LOG_WARNING, "auth_rimap: read (banner): %m");
 	(void) close(s);
 	return strdup("NO [ALERT] error synchronizing with remote authentication server");
     }
+    else if (rc >= RESP_LEN) {
+	syslog(LOG_WARNING, "auth_rimap: read (banner): buffer overflow");
+	(void) close(s);
+	return strdup("NO [ALERT] error synchronizing with remote authentication server");
+    }
+
     rbuf[rc] = '\0';			/* tie off response */
     c = strpbrk(rbuf, "\r\n");
     if (c != NULL) {
@@ -470,15 +572,6 @@ auth_rimap (
     alarm(NETWORK_IO_TIMEOUT);
     rc = retry_writev(s, iov, 5);
     alarm(0);
-    if (rc == -1) {
-	syslog(LOG_WARNING, "auth_rimap: writev: %m");
-	memset(qlogin, 0, strlen(qlogin));
-	free(qlogin);
-	memset(qpass, 0, strlen(qpass));
-	free(qpass);
-	(void)close(s);
-	return strdup(RESP_IERROR);
-    }
 
     /* don't need these any longer */
     memset(qlogin, 0, strlen(qlogin));
@@ -486,61 +579,54 @@ auth_rimap (
     memset(qpass, 0, strlen(qpass));
     free(qpass);
 
-    /* read and parse the LOGIN response */
-
-    alarm(NETWORK_IO_TIMEOUT);
-    rc = read(s, rbuf, sizeof(rbuf));
-    alarm(0);
-    if ( rc>0 ) {
-        /* check if there is more to read */
-        fd_set         perm;
-        int            fds, ret;
-        struct timeval timeout;
-
-        FD_ZERO(&perm);
-        FD_SET(s, &perm);
-        fds = s +1;
-
-        timeout.tv_sec  = 1;
-        timeout.tv_usec = 0;
-        while( select (fds, &perm, NULL, NULL, &timeout ) >0 ) {
-           if ( FD_ISSET(s, &perm) ) {
-              ret = read(s, rbuf+rc, sizeof(rbuf)-rc);
-              if ( ret<=0 ) {
-                 rc = ret;
-                 break;
-              } else {
-                 rc += ret;
-              }
-           }
-        }
-    }
-    (void) close(s);			/* we're done with the remote */
     if (rc == -1) {
-	syslog(LOG_WARNING, "auth_rimap: read (response): %m");
+        syslog(LOG_WARNING, "auth_rimap: writev %s: %m", LOGIN_CMD);
+	(void)close(s);
 	return strdup(RESP_IERROR);
     }
 
-    rbuf[rc] = '\0';			/* tie off response */
-    c = strpbrk(rbuf, "\r\n");
-    if (c != NULL) {
-	*c = '\0';			/* tie off line termination */
+    /* read and parse the LOGIN response */
+
+    rc = read_response(s, rbuf, RESP_LEN, TAG);
+    if (rc == -1) {
+	(void) close(s);
+	syslog(LOG_WARNING, "auth_rimap: read (response): %m");
+	return strdup(RESP_IERROR);
+    }
+    else if (rc >= RESP_LEN) {
+	(void) close(s);
+	syslog(LOG_WARNING, "auth_rimap: read (response): buffer overflow");
+	return strdup(RESP_IERROR);
     }
 
-     if (!strncmp(rbuf, TAG " OK", sizeof(TAG " OK")-1)) {
-	if (flags & VERBOSE) {
-	    syslog(LOG_DEBUG, "auth_rimap: [%s] %s", login, rbuf);
-	}
+    /* build the LOGOUT command */
+
+    iov[0].iov_base = LOGOUT_CMD;
+    iov[0].iov_len  = sizeof(LOGOUT_CMD) - 1;
+    iov[1].iov_base = "\r\n";
+    iov[1].iov_len  = sizeof("\r\n") - 1;
+
+    if (flags & VERBOSE) {
+	syslog(LOG_DEBUG, "auth_rimap: sending %s", LOGOUT_CMD);
+    }
+    alarm(NETWORK_IO_TIMEOUT);
+    rc2 = retry_writev(s, iov, 2);
+    alarm(0);
+    if (rc2 == -1) {
+      syslog(LOG_WARNING, "auth_rimap: writev %s: %m", LOGOUT_CMD);
+    }
+
+    (void) close(s);			/* we're done with the remote */
+
+    rbuf[rc] = '\0';			/* tie off response */
+    login_status = process_login_reply(rbuf, login);
+
+    if (login_status == LOGIN_STATUS_ACCEPTED) {
 	return strdup("OK remote authentication successful");
     }
-    if (!strncmp(rbuf, TAG " NO", sizeof(TAG " NO")-1)) {
-	if (flags & VERBOSE) {
-	    syslog(LOG_DEBUG, "auth_rimap: [%s] %s", login, rbuf);
-	}
+    if (login_status == LOGIN_STATUS_REJECTED) {
 	return strdup("NO remote server rejected your credentials");
     }
-    syslog(LOG_WARNING, "auth_rimap: unexpected response to auth request: %s",
-	   rbuf);
     return strdup(RESP_UNEXPECTED);
     
 }

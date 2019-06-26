@@ -31,10 +31,6 @@
  * crypt(3) based passwd file validation
  * END SYNOPSIS */
 
-#ifdef __GNUC__
-#ident "$Id: auth_sasldb.c,v 1.6 2009/02/20 22:08:56 mel Exp $"
-#endif
-
 /* PUBLIC DEPENDENCIES */
 #include "mechanisms.h"
 
@@ -42,6 +38,7 @@
 #include <stdlib.h>
 #include <pwd.h>
 #include <config.h>
+#include <unistd.h>
 /* END PUBLIC DEPENDENCIES */
 
 #define RETURN(x) return strdup(x)
@@ -75,13 +72,18 @@ static int lame_getcallback(sasl_conn_t *conn __attribute__((unused)),
     return SASL_FAIL;
 }
 
-static void lame_log(sasl_conn_t *conn, int level, const char *fmt, ...) 
+static void lame_log(sasl_conn_t *conn __attribute__((unused)),
+                     int level __attribute__((unused)),
+                     const char *fmt __attribute__((unused)),
+                     ...) 
 {
     return;
 }
 
-static void lame_seterror(sasl_conn_t *conn, unsigned flags,
-			  const char *fmt, ...) 
+static void lame_seterror(sasl_conn_t *conn __attribute__((unused)),
+                          unsigned flags __attribute__((unused)),
+			  const char *fmt __attribute__((unused)),
+                          ...) 
 {
     return;
 }
@@ -132,7 +134,8 @@ auth_sasldb (
     /* VARIABLES */
     char pw[1024];			/* pointer to passwd file entry */
     sasl_utils_t utils;
-    int ret, outsize;
+    int ret;
+    size_t outsize;
     const char *use_realm;
     char realm_buf[MAXHOSTNAMELEN];
     /* END VARIABLES */

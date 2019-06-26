@@ -53,6 +53,9 @@
 #endif
 #include <openssl/evp.h>
 #include <openssl/des.h>
+
+/* for legacy libcrypto support */
+#include "crypto-compat.h"
 #endif
 
 #define LDAP_DEPRECATED 1
@@ -92,7 +95,9 @@ static int lak_auth_custom(LAK *, const char *, const char *, const char *, cons
 static int lak_auth_bind(LAK *, const char *, const char *, const char *, const char *);
 static int lak_auth_fastbind(LAK *, const char *, const char *, const char *, const char *);
 static int lak_group_member(LAK *, const char *, const char *, const char *, const char *);
+#if 0 /* unused */
 static char *lak_result_get(const LAK_RESULT *, const char *);
+#endif
 static int lak_result_add(const char *, const char *, LAK_RESULT **);
 static int lak_check_password(const char *, const char *, void *);
 static int lak_check_crypt(const char *, const char *, void *);
@@ -612,7 +617,7 @@ static int lak_expand_tokens(
 			case 'U':
 				if (ISSET(username)) {
 					user = strchr(username, '@');
-					rc=lak_escape(username, (user ? user - username : strlen(username)), &ebuf);
+					rc=lak_escape(username, (user ? user - username : (unsigned) strlen(username)), &ebuf);
 					if (rc == LAK_OK) {
 						strcat(buf,ebuf);
 						free(ebuf);
@@ -653,8 +658,9 @@ static int lak_expand_tokens(
 						strcat(buf,ebuf);
 						free(ebuf);
 					}
-					break;
-				} 
+				} else
+					syslog(LOG_DEBUG|LOG_AUTH, "Domain/Realm not available.");
+                                break;
 			case 'R':
 			case 'r':
 				if (ISSET(realm)) {
@@ -1453,9 +1459,27 @@ static int lak_auth_bind(
 	if ( rc == LAK_OK &&
 	    (ISSET(lak->conf->group_dn) ||
          ISSET(lak->conf->group_filter)) )
-		rc = lak_group_member(lak, user, service, realm, dn->value);
+	  {
+		/* restore config bind */
+                lak_unbind(lak);
+		lak_user_free(lu);
+		rc = lak_user(
+		lak->conf->bind_dn,
+		lak->conf->id,
+		lak->conf->authz_id,
+		lak->conf->mech,
+		lak->conf->realm,
+		lak->conf->password,
+		&lu);
+		if (rc != LAK_OK)
+			goto done;
+		rc = lak_bind(lak, lu);
+		if (rc != LAK_OK)
+			goto done;
 
-done:;
+		rc = lak_group_member(lak, user, service, realm, dn->value);
+	    }
+done:
 	if (lu)
 		lak_user_free(lu);
 	if (dn)
@@ -1554,6 +1578,9 @@ int lak_authenticate(
                                 syslog(LOG_INFO|LOG_AUTH, "Retrying authentication");
                                 break;
                             }
+
+                            GCC_FALLTHROUGH
+
                         default:
                             syslog(
                                 LOG_DEBUG|LOG_AUTH, 
@@ -1605,6 +1632,7 @@ char *lak_error(
     }
 }
 
+#if 0 /* unused */
 static char *lak_result_get(
     const LAK_RESULT *lres, 
     const char *attr) 
@@ -1618,6 +1646,7 @@ static char *lak_result_get(
 
     return NULL;
 }
+#endif
 
 static int lak_result_add(
 	const char *attr,
@@ -1711,21 +1740,6 @@ static int lak_check_password(
 }
 
 #ifdef HAVE_OPENSSL
-
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-#define EVP_MD_CTX_new()      EVP_MD_CTX_create()
-#define EVP_MD_CTX_free(ctx)  EVP_MD_CTX_destroy((ctx))
-
-static EVP_ENCODE_CTX *EVP_ENCODE_CTX_new(void)
-{
-	return OPENSSL_zalloc(sizeof(EVP_ENCODE_CTX));
-}
-
-static void EVP_ENCODE_CTX_free(EVP_ENCODE_CTX *ctx)
-{
-	OPENSSL_free(ctx);
-}
-#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
 
 static int lak_base64_decode(
 	const char *src,
