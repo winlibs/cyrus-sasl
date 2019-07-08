@@ -5,8 +5,8 @@
     <InstallRoot>..\..\..\msvc\$(Platform)\</InstallRoot>
     <InstallLibDir>$(InstallRoot)\lib\</InstallLibDir>
     <InstallBinDir>$(InstallRoot)\bin\</InstallBinDir>
-    <SaslDependencyRoot>$(InstallRoot)</SaslDependencyRoot>
-    <SaslDependencyLibDir>$(InstallLibDir)</SaslDependencyLibDir>
+    <SaslDependencyRoot>..\..\deps</SaslDependencyRoot>
+    <SaslDependencyLibDir>$(SaslDependencyRoot)\lib</SaslDependencyLibDir>
     <SaslIntermediateLibDir>$(SolutionDir)$(Platform)\$(Configuration)</SaslIntermediateLibDir>
     <Krb5Dir>C:\msvc\krb</Krb5Dir>
   </PropertyGroup>
