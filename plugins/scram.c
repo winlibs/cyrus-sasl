@@ -1,4 +1,4 @@
-/* SCRAM-SHA-1 SASL plugin
+/* SCRAM-SHA-1/SHA-2 SASL plugin
  * Alexey Melnikov
  */
 /* 
@@ -81,8 +81,6 @@
 /* maximum length of the iteration_counter (as a string). Assume it is 32bits */
 #define ITERATION_COUNTER_BUF_LEN   20
 
-#define SCRAM_HASH_SIZE		    20
-
 #define BASE64_LEN(size)	    (((size) / 3 * 4) + (((size) % 3) ? 4 : 0))
 
 #define MAX_CLIENTIN_LEN	    2048
@@ -115,6 +113,30 @@
 
 /* Holds the core salt to avoid regenerating salt each auth. */
 static unsigned char g_salt_key[SALT_SIZE];
+
+/* Note that currently only SHA-* variants are supported! */
+static const char *
+scram_sasl_mech_name(size_t hash_size)
+{
+    switch (hash_size) {
+    case 64:
+	return "SCRAM-SHA-512";
+
+    case 48:
+	return "SCRAM-SHA-384";
+
+    case 32:
+	return "SCRAM-SHA-256";
+
+    case 28:
+	return "SCRAM-SHA-224";
+
+    case 20:
+	return "SCRAM-SHA-1";
+    }
+
+    return NULL;
+}
 
 /* Convert saslname = 1*(value-safe-char / "=2C" / "=3D") in place.
    Returns SASL_FAIL if the encoding is invalid, otherwise SASL_OK */
@@ -268,7 +290,7 @@ print_hash (const char * func, const char * hash, size_t hash_size)
 #endif
 
 
-/* The result variable need to point to a buffer big enough for the [SHA-1] hash */
+/* The result variable need to point to a buffer big enough for the [SHA-*] hash */
 static void
 Hi (const sasl_utils_t * utils,
     const EVP_MD *md,
@@ -523,8 +545,7 @@ scram_server_mech_step1(server_context_t *text,
     struct propval auxprop_values[3];
     int result;
     size_t hash_size = EVP_MD_size(text->md);
-    const char *scram_sasl_mech =
-        (hash_size == 32) ? "SCRAM-SHA-256" : "SCRAM-SHA-1";
+    const char *scram_sasl_mech = scram_sasl_mech_name(hash_size);
 
     if (clientinlen == 0) {
 	sparams->utils->seterror(sparams->utils->conn, 0,
@@ -1165,8 +1186,7 @@ scram_server_mech_step2(server_context_t *text,
     unsigned exact_client_proof_len;
     unsigned int hash_len = 0;
     size_t k, hash_size = EVP_MD_size(text->md);
-    const char *scram_sasl_mech =
-        (hash_size == 32) ? "SCRAM-SHA-256" : "SCRAM-SHA-1";
+    const char *scram_sasl_mech = scram_sasl_mech_name(hash_size);
 
     if (clientinlen == 0) {
 	sparams->utils->seterror(sparams->utils->conn, 0,
@@ -1261,8 +1281,18 @@ scram_server_mech_step2(server_context_t *text,
 	    goto cleanup;
 	}
 
-	if (strcmp(sparams->cbinding->name, text->cbindingname) != 0) {
+	if (sparams->cbinding == NULL) {
 	    sparams->utils->seterror (sparams->utils->conn,
+				      0,
+				      "Server does not support channel binding type received in %s. Received: %s",
+				      scram_sasl_mech,
+				      text->cbindingname);
+	    result = SASL_BADPROT;
+	    goto cleanup;
+	}
+
+	if (strcmp(sparams->cbinding->name, text->cbindingname) != 0) {
+		sparams->utils->seterror (sparams->utils->conn,
 				      0,
 				      "Unsupported channel bindings type received in %s. Expected: %s, received: %s",
                                       scram_sasl_mech,
@@ -1431,7 +1461,7 @@ scram_server_mech_step2(server_context_t *text,
     for (k = 0; k < hash_size; k++) {
 	if (CalculatedStoredKey[k] != text->StoredKey[k]) {
 	    SETERROR(sparams->utils, "StoredKey mismatch");
-	    result = SASL_BADPROT;
+	    result = SASL_BADAUTH;
 	    goto cleanup;
 	}
     }
@@ -1537,8 +1567,7 @@ static int scram_server_mech_step(void *conn_context,
 	return SASL_BADPROT;
     }
 
-    scram_sasl_mech =
-	(EVP_MD_size(text->md) == 32) ? "SCRAM-SHA-256" : "SCRAM-SHA-1";
+    scram_sasl_mech = scram_sasl_mech_name(EVP_MD_size(text->md));
 
     /* this should be well more than is ever needed */
     if (clientinlen > MAX_CLIENTIN_LEN) {
@@ -1607,8 +1636,7 @@ static int scram_setpass(void *glob_context,
     const char *generate_scram_secret;
     const EVP_MD *md = EVP_get_digestbyname((const char *) glob_context);
     size_t hash_size = EVP_MD_size(md);
-    const char *scram_sasl_mech =
-        (hash_size == 32) ? "SCRAM-SHA-256" : "SCRAM-SHA-1";
+    const char *scram_sasl_mech = scram_sasl_mech_name(hash_size);
     
     /* Do we have a backend that can store properties? */
     if (!sparams->utils->auxprop_store ||
@@ -1752,7 +1780,7 @@ static int scram_setpass(void *glob_context,
 
 	base64_ServerKey[BASE64_LEN(hash_size)] = '\0';
 
-	secret_len = strlen(scram_sasl_mech) + strlen(":$:") + 
+	secret_len = strlen(scram_sasl_mech) + strlen("$:$:") +
 		     ITERATION_COUNTER_BUF_LEN +
 		     sizeof(base64_salt) +
 		     sizeof(base64_StoredKey) +
@@ -1842,10 +1870,55 @@ static void scram_server_mech_dispose(void *conn_context,
 
 static sasl_server_plug_t scram_server_plugins[] = 
 {
-#ifdef HAVE_SHA256
+#ifdef HAVE_SHA512
+    {
+	"SCRAM-SHA-512",		/* mech_name */
+	0,				/* max_ssf */
+	SASL_SET_HASH_STRENGTH_BITS(512) |
+	SASL_SEC_NOPLAINTEXT
+	| SASL_SEC_NOACTIVE
+	| SASL_SEC_NOANONYMOUS
+	| SASL_SEC_MUTUAL_AUTH,		/* security_flags */
+	SASL_FEAT_ALLOWS_PROXY
+        | SASL_FEAT_SUPPORTS_HTTP
+	| SASL_FEAT_CHANNEL_BINDING,	/* features */
+	"SHA512",			/* glob_context */
+	&scram_server_mech_new,		/* mech_new */
+	&scram_server_mech_step,	/* mech_step */
+	&scram_server_mech_dispose,	/* mech_dispose */
+	NULL,				/* mech_free */
+	&scram_setpass,			/* setpass */
+	NULL,				/* user_query */
+	NULL,				/* idle */
+	NULL,				/* mech avail */
+	NULL				/* spare */
+    },
+    {
+	"SCRAM-SHA-384",		/* mech_name */
+	0,				/* max_ssf */
+	SASL_SET_HASH_STRENGTH_BITS(384) |
+	SASL_SEC_NOPLAINTEXT
+	| SASL_SEC_NOACTIVE
+	| SASL_SEC_NOANONYMOUS
+	| SASL_SEC_MUTUAL_AUTH,		/* security_flags */
+	SASL_FEAT_ALLOWS_PROXY
+        | SASL_FEAT_SUPPORTS_HTTP
+	| SASL_FEAT_CHANNEL_BINDING,	/* features */
+	"SHA384",			/* glob_context */
+	&scram_server_mech_new,		/* mech_new */
+	&scram_server_mech_step,	/* mech_step */
+	&scram_server_mech_dispose,	/* mech_dispose */
+	NULL,				/* mech_free */
+	&scram_setpass,			/* setpass */
+	NULL,				/* user_query */
+	NULL,				/* idle */
+	NULL,				/* mech avail */
+	NULL				/* spare */
+    },
     {
 	"SCRAM-SHA-256",		/* mech_name */
 	0,				/* max_ssf */
+	SASL_SET_HASH_STRENGTH_BITS(256) |
 	SASL_SEC_NOPLAINTEXT
 	| SASL_SEC_NOACTIVE
 	| SASL_SEC_NOANONYMOUS
@@ -1864,10 +1937,33 @@ static sasl_server_plug_t scram_server_plugins[] =
 	NULL,				/* mech avail */
 	NULL				/* spare */
     },
+    {
+	"SCRAM-SHA-224",		/* mech_name */
+	0,				/* max_ssf */
+	SASL_SET_HASH_STRENGTH_BITS(224) |
+	SASL_SEC_NOPLAINTEXT
+	| SASL_SEC_NOACTIVE
+	| SASL_SEC_NOANONYMOUS
+	| SASL_SEC_MUTUAL_AUTH,		/* security_flags */
+	SASL_FEAT_ALLOWS_PROXY
+        | SASL_FEAT_SUPPORTS_HTTP
+	| SASL_FEAT_CHANNEL_BINDING,	/* features */
+	"SHA224",			/* glob_context */
+	&scram_server_mech_new,		/* mech_new */
+	&scram_server_mech_step,	/* mech_step */
+	&scram_server_mech_dispose,	/* mech_dispose */
+	NULL,				/* mech_free */
+	&scram_setpass,			/* setpass */
+	NULL,				/* user_query */
+	NULL,				/* idle */
+	NULL,				/* mech avail */
+	NULL				/* spare */
+    },
 #endif
     {
 	"SCRAM-SHA-1",			/* mech_name */
 	0,				/* max_ssf */
+	SASL_SET_HASH_STRENGTH_BITS(160) |
 	SASL_SEC_NOPLAINTEXT
 	| SASL_SEC_NOACTIVE
 	| SASL_SEC_NOANONYMOUS
@@ -1901,8 +1997,8 @@ int scram_server_plug_init(const sasl_utils_t *utils,
 
     *out_version = SASL_SERVER_PLUG_VERSION;
     *pluglist = scram_server_plugins;
-#ifdef HAVE_SHA256
-    *plugcount = 2;
+#ifdef HAVE_SHA512
+    *plugcount = 5;
 #else
     *plugcount = 1;
 #endif
@@ -1982,8 +2078,7 @@ scram_client_mech_step1(client_context_t *text,
     char channel_binding_state = 'n';
     const char * channel_binding_name = NULL;
     char * encoded_authorization_id = NULL;
-    const char *scram_sasl_mech =
-        (EVP_MD_size(text->md) == 32) ? "SCRAM-SHA-256" : "SCRAM-SHA-1";
+    const char *scram_sasl_mech = scram_sasl_mech_name(EVP_MD_size(text->md));
 
     /* check if sec layer strong enough */
     if (params->props.min_ssf > params->external_ssf) {
@@ -2245,8 +2340,7 @@ scram_client_mech_step2(client_context_t *text,
     size_t client_proof_len;
     unsigned int hash_len = 0;
     size_t k, hash_size = EVP_MD_size(text->md);
-    const char *scram_sasl_mech =
-        (hash_size == 32) ? "SCRAM-SHA-256" : "SCRAM-SHA-1";
+    const char *scram_sasl_mech = scram_sasl_mech_name(hash_size);
 
     if (serverinlen == 0) {
 	params->utils->seterror(params->utils->conn, 0,
@@ -2659,8 +2753,7 @@ scram_client_mech_step3(client_context_t *text,
     char ServerSignature[EVP_MAX_MD_SIZE];
     unsigned int hash_len = 0;
     size_t k, hash_size = EVP_MD_size(text->md);
-    const char *scram_sasl_mech =
-        (hash_size == 32) ? "SCRAM-SHA-256" : "SCRAM-SHA-1";
+    const char *scram_sasl_mech = scram_sasl_mech_name(hash_size);
 
     if (serverinlen < 3) {
 	params->utils->seterror(params->utils->conn, 0,
@@ -2770,8 +2863,7 @@ static int scram_client_mech_step(void *conn_context,
 {
     int result = SASL_FAIL;
     client_context_t *text = (client_context_t *) conn_context;
-    const char *scram_sasl_mech =
-        (EVP_MD_size(text->md) == 32) ? "SCRAM-SHA-256" : "SCRAM-SHA-1";
+    const char *scram_sasl_mech = scram_sasl_mech_name(EVP_MD_size(text->md));
 
     *clientout = NULL;
     *clientoutlen = 0;
@@ -2863,10 +2955,53 @@ static void scram_client_mech_dispose(void *conn_context,
 
 static sasl_client_plug_t scram_client_plugins[] = 
 {
-#ifdef HAVE_SHA256
+#ifdef HAVE_SHA512
+    {
+	"SCRAM-SHA-512",		/* mech_name */
+	0,				/* max_ssf */
+	SASL_SET_HASH_STRENGTH_BITS(512) |
+	SASL_SEC_NOPLAINTEXT
+	| SASL_SEC_NOANONYMOUS
+	| SASL_SEC_NOACTIVE
+	| SASL_SEC_MUTUAL_AUTH,		/* security_flags */
+	SASL_FEAT_ALLOWS_PROXY
+        | SASL_FEAT_SUPPORTS_HTTP
+	| SASL_FEAT_CHANNEL_BINDING, 	/* features */
+	NULL,				/* required_prompts */
+	"SHA512",			/* glob_context */
+	&scram_client_mech_new,		/* mech_new */
+	&scram_client_mech_step,	/* mech_step */
+	&scram_client_mech_dispose,	/* mech_dispose */
+	NULL,				/* mech_free */
+	NULL,				/* idle */
+	NULL,				/* spare */
+	NULL				/* spare */
+    },
+    {
+	"SCRAM-SHA-384",		/* mech_name */
+	0,				/* max_ssf */
+	SASL_SET_HASH_STRENGTH_BITS(384) |
+	SASL_SEC_NOPLAINTEXT
+	| SASL_SEC_NOANONYMOUS
+	| SASL_SEC_NOACTIVE
+	| SASL_SEC_MUTUAL_AUTH,		/* security_flags */
+	SASL_FEAT_ALLOWS_PROXY
+        | SASL_FEAT_SUPPORTS_HTTP
+	| SASL_FEAT_CHANNEL_BINDING, 	/* features */
+	NULL,				/* required_prompts */
+	"SHA384",			/* glob_context */
+	&scram_client_mech_new,		/* mech_new */
+	&scram_client_mech_step,	/* mech_step */
+	&scram_client_mech_dispose,	/* mech_dispose */
+	NULL,				/* mech_free */
+	NULL,				/* idle */
+	NULL,				/* spare */
+	NULL				/* spare */
+    },
     {
 	"SCRAM-SHA-256",		/* mech_name */
 	0,				/* max_ssf */
+	SASL_SET_HASH_STRENGTH_BITS(256) |
 	SASL_SEC_NOPLAINTEXT
 	| SASL_SEC_NOANONYMOUS
 	| SASL_SEC_NOACTIVE
@@ -2884,10 +3019,32 @@ static sasl_client_plug_t scram_client_plugins[] =
 	NULL,				/* spare */
 	NULL				/* spare */
     },
+    {
+	"SCRAM-SHA-224",		/* mech_name */
+	0,				/* max_ssf */
+	SASL_SET_HASH_STRENGTH_BITS(224) |
+	SASL_SEC_NOPLAINTEXT
+	| SASL_SEC_NOANONYMOUS
+	| SASL_SEC_NOACTIVE
+	| SASL_SEC_MUTUAL_AUTH,		/* security_flags */
+	SASL_FEAT_ALLOWS_PROXY
+        | SASL_FEAT_SUPPORTS_HTTP
+	| SASL_FEAT_CHANNEL_BINDING, 	/* features */
+	NULL,				/* required_prompts */
+	"SHA224",			/* glob_context */
+	&scram_client_mech_new,		/* mech_new */
+	&scram_client_mech_step,	/* mech_step */
+	&scram_client_mech_dispose,	/* mech_dispose */
+	NULL,				/* mech_free */
+	NULL,				/* idle */
+	NULL,				/* spare */
+	NULL				/* spare */
+    },
 #endif
     {
 	"SCRAM-SHA-1",			/* mech_name */
 	0,				/* max_ssf */
+	SASL_SET_HASH_STRENGTH_BITS(160) |
 	SASL_SEC_NOPLAINTEXT
 	| SASL_SEC_NOANONYMOUS
 	| SASL_SEC_NOACTIVE
@@ -2920,8 +3077,8 @@ int scram_client_plug_init(const sasl_utils_t *utils,
     
     *out_version = SASL_CLIENT_PLUG_VERSION;
     *pluglist = scram_client_plugins;
-#ifdef HAVE_SHA256
-    *plugcount = 2;
+#ifdef HAVE_SHA512
+    *plugcount = 5;
 #else
     *plugcount = 1;
 #endif

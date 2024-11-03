@@ -44,7 +44,7 @@
 # Note that this doesn't necessaraly follow the libsasl2 verison info
 sasl_version = 1:25:0
 
-AM_CPPFLAGS=-fPIC -I$(top_srcdir)/include -I$(top_builddir)/include @SASL_DB_INC@
+AM_CPPFLAGS=-DLIBSASL_EXPORTS=1 -fPIC -I$(top_srcdir)/include -I$(top_builddir)/include @SASL_DB_INC@
 
 extra_common_sources = db_none.c db_lmdb.c db_ndbm.c db_gdbm.c db_berkeley.c
 
@@ -55,5 +55,5 @@ noinst_LTLIBRARIES = libsasldb.la
 libsasldb_la_SOURCES = allockey.c sasldb.h
 EXTRA_libsasldb_la_SOURCES = $(extra_common_sources)
 libsasldb_la_DEPENDENCIES = $(SASL_DB_BACKEND)
-libsasldb_la_LIBADD = $(SASL_DB_BACKEND)
+libsasldb_la_LIBADD = $(SASL_DB_BACKEND) $(SASL_DB_LIB)
 libsasldb_la_LDFLAGS = -no-undefined

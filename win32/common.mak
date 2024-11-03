@@ -2,7 +2,7 @@
 #Keep in sync with include/sasl.h and win32/include/config.h
 SASL_VERSION_MAJOR=2
 SASL_VERSION_MINOR=1
-SASL_VERSION_STEP=27
+SASL_VERSION_STEP=28
 
 !IF "$(STATIC)" == ""
 STATIC=yes
@@ -27,6 +27,10 @@ LINK32EXE=$(LINK32)
 LINK32LIB=link.exe /lib /nologo
 
 SYS_LIBS=ws2_32.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib
+COMMON_CPPFLAGS=/D "WIN32" /D "_WINDOWS" /D "_MBCS" /D "_USRDLL" /D "GCC_FALLTHROUGH="
+
+# Disable all static plugins (this is not supported yet)
+COMMON_CPPFLAGS = $(COMMON_CPPFLAGS) /D "NO_STATIC_PLUGINS"
 
 !IF "$(BITS)" == "64"
 SYS_LIBS=$(SYS_LIBS) bufferoverflowU.lib
@@ -94,28 +98,28 @@ LMDB_LIBPATH=c:\work\isode\lmdb\libraries\liblmdb\Release
 !ENDIF
 
 !IF "$(OPENSSL_INCLUDE)" == ""
-OPENSSL_INCLUDE="D:\openssl\engine-0.9.6g-md3\include"
+OPENSSL_INCLUDE=D:\openssl\engine-0.9.6g-md3\include
 !IF "$(VERBOSE)" != "0"
 !MESSAGE Defaulting OpenSSL Include path to $(OPENSSL_INCLUDE).
 !ENDIF
 !ENDIF
 
 !IF "$(OPENSSL_LIBPATH)" == ""
-OPENSSL_LIBPATH="D:\openssl\engine-0.9.6g-md3\lib"
+OPENSSL_LIBPATH=D:\openssl\engine-0.9.6g-md3\lib
 !IF "$(VERBOSE)" != "0"
 !MESSAGE Defaulting OpenSSL library path to $(OPENSSL_LIBPATH).
 !ENDIF
 !ENDIF
 
 !IF "$(GSSAPI_INCLUDE)" == ""
-GSSAPI_INCLUDE="C:\Program Files\CyberSafe\Developer Pack\ApplicationSecuritySDK\include"
+GSSAPI_INCLUDE=C:\Program Files\CyberSafe\Developer Pack\ApplicationSecuritySDK\include
 !IF "$(VERBOSE)" != "0"
 !MESSAGE Defaulting GSSAPI Include path to $(GSSAPI_INCLUDE).
 !ENDIF
 !ENDIF
 
 !IF "$(GSSAPI_LIBPATH)" == ""
-GSSAPI_LIBPATH="C:\Program Files\CyberSafe\Developer Pack\ApplicationSecuritySDK\lib"
+GSSAPI_LIBPATH=C:\Program Files\CyberSafe\Developer Pack\ApplicationSecuritySDK\lib
 !IF "$(VERBOSE)" != "0"
 !MESSAGE Defaulting GSSAPI library path to $(GSSAPI_LIBPATH).
 !ENDIF
@@ -129,7 +133,7 @@ SQLITE_INCLUDES=/I"C:\work\open_source\sqllite\sqlite\src" /I"C:\work\open_sourc
 !ENDIF
 
 !IF "$(SQLITE_LIBPATH)" == ""
-SQLITE_LIBPATH="C:\work\open_source\sqllite\sqlite\objs"
+SQLITE_LIBPATH=C:\work\open_source\sqllite\sqlite\objs
 !IF "$(VERBOSE)" != "0"
 !MESSAGE Defaulting SQLITE library path to $(SQLITE_LIBPATH).
 !ENDIF
@@ -143,7 +147,7 @@ SQLITE_INCLUDES3=/I"c:\work\sqlite\generated"
 !ENDIF
 
 !IF "$(SQLITE_LIBPATH3)" == ""
-SQLITE_LIBPATH3="c:\work\sqlite\objs.NT"
+SQLITE_LIBPATH3=c:\work\sqlite\objs.NT
 !IF "$(VERBOSE)" != "0"
 !MESSAGE Defaulting SQLITE library path to $(SQLITE_LIBPATH3).
 !ENDIF
@@ -183,11 +187,7 @@ CODEGEN=/MD
 !ENDIF 
 !ENDIF 
 
-!IF "$(VCVER)" != "6"
-ENABLE_WIN64_WARNINGS=/Wp64
-!ENDIF
-
-CPP_PROJ= $(CODEGEN) /W3 $(EXCEPTHANDLING) /O2 $(ENABLE_WIN64_WARNINGS) /Zi /D "NDEBUG" /D _CRT_SECURE_NO_DEPRECATE=1 $(CPPFLAGS) /FD /c
+CPP_PROJ= $(CODEGEN) /W3 $(EXCEPTHANDLING) /O2 /Zi /D "NDEBUG" /D _CRT_SECURE_NO_DEPRECATE=1 $(CPPFLAGS) /FD /c
 
 incremental=no
 

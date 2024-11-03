@@ -72,16 +72,10 @@
 #include <arpa/inet.h>
 #include <signal.h>
 #include <netdb.h>
-#if TIME_WITH_SYS_TIME
-# include <sys/time.h>
-# include <time.h>
-#else
-# if HAVE_SYS_TIME_H
+#if HAVE_SYS_TIME_H
 #  include <sys/time.h>
-# else
-#  include <time.h>
-# endif
 #endif
+# include <time.h>
 
 #include "auth_rimap.h"
 #include "utils.h"
@@ -366,6 +360,34 @@ process_login_reply(
 
 /* END FUNCTION: process_login_reply */
 
+
+#ifndef HAVE_MEMMEM
+static void *memmem(
+		const void *big, size_t big_len,
+		const void *little, size_t little_len)
+{
+	const char *bp = (const char *)big;
+	const char *lp = (const char *)little;
+	size_t l;
+
+	if (big_len < little_len || little_len == 0 || big_len == 0)
+		return NULL;
+
+    	size_t len_count = 0;
+	while (len_count < big_len) {
+		for (l = 0; l < little_len; l++) {
+			if (bp[l] != lp[l])
+				break;
+		}
+		if (l == little_len)
+			return (void *)bp;
+		bp++;
+		len_count++;
+	}
+
+	return NULL;
+}
+#endif
 
 static int read_response(int s, char *rbuf, int buflen, const char *tag)
 {

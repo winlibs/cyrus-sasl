@@ -191,10 +191,10 @@ int _sasl_add_string(char **out, size_t *alloclen,
   if (add==NULL) add = "(null)";
 
   addlen=strlen(add); /* only compute once */
-  if (_buf_alloc(out, alloclen, (*outlen)+addlen)!=SASL_OK)
+  if (_buf_alloc(out, alloclen, (*outlen)+addlen+1)!=SASL_OK)
     return SASL_NOMEM;
 
-  strncpy(*out + *outlen, add, addlen);
+  strcpy(*out + *outlen, add);
   *outlen += addlen;
 
   return SASL_OK;
@@ -773,9 +773,9 @@ int _sasl_conn_init(sasl_conn_t *conn,
       sasl_strlower (conn->serverFQDN);
   } else if (conn->type == SASL_CONN_SERVER) {
       /* We can fake it because we *are* the server */
-      char name[MAXHOSTNAMELEN];
+      char name[MAXFQDNLEN];
       memset(name, 0, sizeof(name));
-      if (get_fqhostname (name, MAXHOSTNAMELEN, 0) != 0) {
+      if (get_fqhostname (name, MAXFQDNLEN, 0) != 0) {
         return (SASL_FAIL);
       }
       

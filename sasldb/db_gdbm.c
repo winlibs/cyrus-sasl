@@ -107,9 +107,11 @@ int _sasldb_getdata(const sasl_utils_t *utils,
   gkey.dptr = key;
   gkey.dsize = key_len;
   gvalue = gdbm_fetch(db, gkey);
+  int fetch_errno = gdbm_errno;
+
   gdbm_close(db);
   if (! gvalue.dptr) {
-      if (gdbm_errno == GDBM_ITEM_NOT_FOUND) {
+      if (fetch_errno == GDBM_ITEM_NOT_FOUND) {
           utils->seterror(conn, SASL_NOLOG,
 			  "user: %s@%s property: %s not found in %s",
 			  authid, realm, propName, path);
@@ -221,7 +223,7 @@ int _sasldb_putdata(const sasl_utils_t *utils,
   return result;
 }
 
-int _sasl_check_db(const sasl_utils_t *utils,
+LIBSASL_API int _sasl_check_db(const sasl_utils_t *utils,
 		   sasl_conn_t *conn)
 {
     const char *path = SASL_DB_PATH;
@@ -270,7 +272,7 @@ typedef struct gdbm_handle
     int first;
 } handle_t;
 
-sasldb_handle _sasldb_getkeyhandle(const sasl_utils_t *utils,
+LIBSASL_API sasldb_handle _sasldb_getkeyhandle(const sasl_utils_t *utils,
 				   sasl_conn_t *conn) 
 {
     const char *path = SASL_DB_PATH;
@@ -316,7 +318,7 @@ sasldb_handle _sasldb_getkeyhandle(const sasl_utils_t *utils,
     return (sasldb_handle)handle;
 }
 
-int _sasldb_getnextkey(const sasl_utils_t *utils __attribute__((unused)),
+LIBSASL_API int _sasldb_getnextkey(const sasl_utils_t *utils __attribute__((unused)),
 		       sasldb_handle handle, char *out,
 		       const size_t max_out, size_t *out_len) 
 {
@@ -346,7 +348,7 @@ int _sasldb_getnextkey(const sasl_utils_t *utils __attribute__((unused)),
     return SASL_CONTINUE;
 }
 
-int _sasldb_releasekeyhandle(const sasl_utils_t *utils,
+LIBSASL_API int _sasldb_releasekeyhandle(const sasl_utils_t *utils,
 			     sasldb_handle handle) 
 {
     handle_t *dbh = (handle_t *)handle;

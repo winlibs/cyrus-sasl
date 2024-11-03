@@ -34,12 +34,12 @@ LDAP_LIBS = $(LDAP_LIB_BASE)\olber32.lib $(LDAP_LIB_BASE)\oldap32.lib ..\lib\lib
 !IF "$(SQL)" == "SQLITE"
 PLUGINS_EXT=$(PLUGINS_EXT) saslSQLITE.dll
 SQL_FLAGS= $(SQLITE_INCLUDES) /DHAVE_SQLITE=1
-SQLITE_LIBS = /libpath:$(SQLITE_LIBPATH) libsqlite.lib
+SQLITE_LIBS = "/libpath:$(SQLITE_LIBPATH)" libsqlite.lib
 !ENDIF
 !IF "$(SQL)" == "SQLITE3"
 PLUGINS_EXT=$(PLUGINS_EXT) saslSQLITE.dll
 SQL_FLAGS= $(SQLITE_INCLUDES3) /DHAVE_SQLITE3=1
-SQLITE_LIBS = /libpath:$(SQLITE_LIBPATH3) libsqlite3.lib
+SQLITE_LIBS = "/libpath:$(SQLITE_LIBPATH3)" libsqlite3.lib
 !ENDIF
 
 PLUGINS=saslANONYMOUS.dll \
@@ -57,94 +57,82 @@ generated_rc=saslANONYMOUS.rc saslPLAIN.rc saslCRAMMD5.rc saslDIGESTMD5.rc saslL
 # emulation on Windows, so there is no need to build getaddrinfo.c
 
 !IF "$(VCVER)" == "6"
-compat_sources = getaddrinfo.c getnameinfo.c
 compat_objs = getaddrinfo.obj getnameinfo.obj
 !ENDIF
 
-common_sources = plugin_common.c plugin_common.h
 common_objs = plugin_common.obj $(compat_objs)
 
-saslANONYMOUS_sources = anonymous.c anonymous_init.c $(common_sources)
 saslANONYMOUS_objs = anonymous.obj anonymous_init.obj $(common_objs)
 saslANONYMOUS_out = saslANONYMOUS.dll saslANONYMOUS.exp saslANONYMOUS.lib
 
-saslPLAIN_sources = plain.c plain_init.c $(common_sources)
 saslPLAIN_objs = plain.obj plain_init.obj $(common_objs)
 saslPLAIN_out = saslPLAIN.dll saslPLAIN.exp saslPLAIN.lib
 
-saslCRAMMD5_sources = cram.c crammd5_init.c $(common_sources)
 saslCRAMMD5_objs = cram.obj crammd5_init.obj $(common_objs)
 saslCRAMMD5_out = saslCRAMMD5.dll saslCRAMMD5.exp saslCRAMMD5.lib
 
-saslDIGESTMD5_sources = digestmd5.c digestmd5_init.c $(common_sources)
 saslDIGESTMD5_objs = digestmd5.obj digestmd5_init.obj $(common_objs)
 saslDIGESTMD5_out = saslDIGESTMD5.dll saslDIGESTMD5.exp saslDIGESTMD5.lib
 
-saslLOGIN_sources = login.c login_init.c $(common_sources)
 saslLOGIN_objs = login.obj login_init.obj $(common_objs)
 saslLOGIN_out = saslLOGIN.dll saslLOGIN.exp saslLOGIN.lib
 
-saslSCRAM_sources = scram.c scram_init.c $(common_sources)
 saslSCRAM_objs = scram.obj scram_init.obj $(common_objs)
 saslSCRAM_out = saslSCRAM.dll saslSCRAM.exp saslSCRAM.lib
 
-saslNTLM_sources = ntlm.c ntlm_init.c $(common_sources)
 saslNTLM_objs = ntlm.obj ntlm_init.obj $(common_objs)
 saslNTLM_out = saslNTLM.dll saslNTLM.exp saslNTLM.lib
 
-saslGSSAPI_sources = gssapi.c gssapiv2_init.c $(common_sources)
 saslGSSAPI_objs = gssapi.obj gssapiv2_init.obj $(common_objs)
 saslGSSAPI_out = saslGSSAPI.dll saslGSSAPI.exp saslGSSAPI.lib
 
-saslSRP_sources = srp.c srp_init.c $(common_sources)
 saslSRP_objs = srp.obj srp_init.obj $(common_objs)
 saslSRP_out = saslSRP.dll saslSRP.exp saslSRP.lib
 
-saslOTP_sources = otp.c otp_init.c $(common_sources)
 saslOTP_objs = otp.obj otp_init.obj $(common_objs)
 saslOTP_out = saslOTP.dll saslOTP.exp saslOTP.lib
 
-saslSQL_sources = sql.c sql_init.c $(common_sources)
 saslSQL_objs = sql.obj sql_init.obj $(common_objs)
 # saslSQL_out is an agregation of all generated files for all SQL plugins
 saslSQL_out = saslSQLITE.dll saslSQLITE.exp saslSQLITE.lib
 
-saslLDAPDB_sources = ldapdb.c $(common_sources)
 saslLDAPDB_objs = ldapdb.obj $(common_objs)
 saslLDAPDB_out = saslLDAPDB.dll saslLDAPDB.exp saslLDAPDB.lib
 
 !IF "$(NTLM)" == "1" || "$(SRP)" == "1" || "$(OTP)" == "1" || "$(SCRAM)" == "1"
-OPENSSL_FLAGS= /I $(OPENSSL_INCLUDE)
+OPENSSL_FLAGS= /I "$(OPENSSL_INCLUDE)"
 !ELSE 
 OPENSSL_FLAGS=
 !ENDIF 
 
 !IF "$(GSSAPILIB)" == ""
+!IF EXISTS($(GSSAPI_LIBPATH)\gssapi64.lib)
+GSSAPILIB=gssapi64.lib
+!ELSE
 GSSAPILIB=gssapi32.lib
+!ENDIF
 !ENDIF
 
 !IF "$(GSSAPI)" == "CyberSafe"
-GSS_FLAGS= /I $(GSSAPI_INCLUDE) /D "HAVE_GSS_C_NT_HOSTBASED_SERVICE" /D "HAVE_GSS_C_NT_USER_NAME"
-GSS_LIBS=/libpath:$(GSSAPI_LIBPATH) $(GSSAPILIB)
+GSS_FLAGS= /I "$(GSSAPI_INCLUDE)" /D "HAVE_GSSAPI_GSSAPI_H" /D "HAVE_GSSAPI_GSSAPI_KRB5_H" /D "HAVE_GSS_C_NT_HOSTBASED_SERVICE" /D "HAVE_GSS_C_NT_USER_NAME"
+GSS_LIBS="/libpath:$(GSSAPI_LIBPATH)" $(GSSAPILIB)
 !ELSE IF "$(GSSAPI)" == "MITKerberos"
-GSS_FLAGS= /I $(GSSAPI_INCLUDE) /D "HAVE_GSS_C_NT_HOSTBASED_SERVICE" /D "HAVE_GSS_C_NT_USER_NAME"
-GSS_LIBS=/libpath:$(GSSAPI_LIBPATH) $(GSSAPILIB)
+GSS_FLAGS= /I "$(GSSAPI_INCLUDE)" /D "HAVE_GSSAPI_GSSAPI_H" /D "HAVE_GSSAPI_GSSAPI_KRB5_H" /D "HAVE_GSS_C_NT_HOSTBASED_SERVICE" /D "HAVE_GSS_C_NT_USER_NAME"
+GSS_LIBS="/libpath:$(GSSAPI_LIBPATH)" $(GSSAPILIB)
 !ELSE 
 GSS_FLAGS=
 GSS_LIBS=
 !ENDIF
 
 !IF "$(SASLDB)" == "LMDB"
-DB_LIBS=/libpath:$(LMDB_LIBPATH) lmdb.lib
+DB_LIBS="/libpath:$(LMDB_LIBPATH)" lmdb.lib
 
 # Auxprop Plugin
-libsasldb_sources = allockey.c db_lmdb.c
 libsasldb_objs = allockey.obj db_lmdb.obj
 !ELSE
-DB_LIBS=/libpath:$(DB_LIBPATH) $(DB_LIB)
+DB_LIBS="/libpath:$(DB_LIBPATH)" "$(DB_LIB)"
 
 # Auxprop Plugin
-libsasldb_sources = allockey.c db_berkeley.c
 libsasldb_objs = allockey.obj db_berkeley.obj
 !ENDIF
 
@@ -152,9 +140,8 @@ CRAM_FLAGS=/DOBSOLETE_CRAM_ATTR=1
 
 DIGEST_FLAGS=/D "WITH_RC4" /DOBSOLETE_DIGEST_ATTR=1
 
-SCRAM_FLAGS=/DHAVE_SHA256=1
+SCRAM_FLAGS=/DHAVE_SHA512=1
 
-saslSASLDB_sources = sasldb.c sasldb_init.c $(libsasldb_sources) $(common_sources)
 saslSASLDB_objs = sasldb.obj sasldb_init.obj $(libsasldb_objs) $(common_objs)
 saslSASLDB_out = saslSASLDB.dll saslSASLDB.exp saslSASLDB.lib
 
@@ -162,16 +149,27 @@ all_objs = $(saslANONYMOUS_objs) $(saslPLAIN_objs) $(saslCRAMMD5_objs) $(saslDIG
 all_out = $(saslANONYMOUS_out) $(saslPLAIN_out) $(saslCRAMMD5_out) $(saslDIGESTMD5_out) $(saslLOGIN_out) $(saslSCRAM_out) $(saslNTLM_out) $(saslGSSAPI_out) $(saslSRP_out) $(saslOTP_out) $(saslSASLDB_out) $(saslSQL_out) $(saslLDAPDB_out)
 
 # LIBSASL_EXPORTS is required to export additional DB routines from sasldb
-DB_FLAGS = /I $(DB_INCLUDE) /I "..\sasldb" /D "LIBSASL_EXPORTS" /D "KEEP_DB_OPEN"
+DB_FLAGS = /I "$(DB_INCLUDE)" /I "..\sasldb" /D "LIBSASL_EXPORTS" /D "KEEP_DB_OPEN"
 
 !IF $(TARGET_WIN_SYSTEM) >= 51
 EXTRA_FLAGS = /D TARGET_WIN_SYSTEM=$(TARGET_WIN_SYSTEM) $(EXTRA_FLAGS)
 !ENDIF
 
 EXTRA_FLAGS=$(EXTRA_FLAGS) $(DB_FLAGS) $(OPENSSL_FLAGS) $(GSS_FLAGS) $(SRP_FLAGS) $(SQL_FLAGS) $(DIGEST_FLAGS) $(CRAM_FLAGS) $(SCRAM_FLAGS) $(LDAP_FLAGS)
-CPPFLAGS = /I "..\win32\include" /I "." /I "..\include" $(EXTRA_FLAGS) /D "WIN32" /D "_WIN32" /D "_WINDOWS" /D "_MBCS" /D "_USRDLL"
+CPPFLAGS = /I "..\win32\include" /I "." /I "..\include" /I "..\common" $(EXTRA_FLAGS) /D "_WIN32" $(COMMON_CPPFLAGS)
 
-OPENSSL_LIBS=/libpath:$(OPENSSL_LIBPATH) libeay32.lib ssleay32.lib
+OPENSSL_LIBS="/libpath:$(OPENSSL_LIBPATH)"
+!IF      EXISTS($(OPENSSL_LIBPATH)\libcrypto.lib)
+# OpenSSL >= 1.1
+OPENSSL_LIBS=$(OPENSSL_LIBS) libcrypto.lib
+!ELSE IF EXISTS($(OPENSSL_LIBPATH)\libeay32.lib)
+# OpenSSL <= 1.0
+OPENSSL_LIBS=$(OPENSSL_LIBS) libeay32.lib
+!ELSE
+# Don't error out because during 'nmake install', variable 'OPENSSL_LIBS'
+# can be missing but it's not used anyway.
+OPENSSL_LIBS=$(OPENSSL_LIBS) failed_to_identify_openssl.lib
+!ENDIF
 
 # Where to install files from this directory
 libdir = $(prefix)\lib
@@ -190,30 +188,9 @@ all : all-recursive
 # us to copy GSSAPI plugin, which might not be in $(PLUGINS).
 #
 install: $(PLUGINS)
-	@xcopy *.dll $(bindir) /I /F /Y
+	@xcopy *.dll "$(bindir)" /I /F /Y
 
 all-recursive : $(PLUGINS)
-
-getaddrinfo.c: ..\lib\getaddrinfo.c
-	xcopy /D /Y ..\lib\getaddrinfo.c .
-
-getnameinfo.c: ..\lib\getnameinfo.c
-	xcopy /D /Y ..\lib\getnameinfo.c .
-
-plugin_common.c: ..\common\plugin_common.c
-	xcopy /D /Y ..\common\plugin_common.c .
-
-plugin_common.h: ..\common\plugin_common.h
-	xcopy /D /Y ..\common\plugin_common.h .
-
-allockey.c: ..\sasldb\allockey.c
-	xcopy /D /Y ..\sasldb\allockey.c .
-
-db_berkeley.c: ..\sasldb\db_berkeley.c
-	xcopy /D /Y ..\sasldb\db_berkeley.c .
-
-db_lmdb.c: ..\sasldb\db_lmdb.c
-	xcopy /D /Y ..\sasldb\db_lmdb.c .
 
 #Add /pdb: option?
 
@@ -233,7 +210,7 @@ saslCRAMMD5.dll: $(saslCRAMMD5_objs) saslCRAMMD5.res
 	IF EXIST $@.manifest mt -manifest $@.manifest -outputresource:$@;2
 
 saslDIGESTMD5.dll: $(saslDIGESTMD5_objs) saslDIGESTMD5.res
-	$(LINK32DLL) @<< $(LINK32DLL_FLAGS) /out:"saslDIGESTMD5.dll" /implib:"saslDIGESTMD5.lib" $(saslDIGESTMD5_objs) saslDIGESTMD5.res
+	$(LINK32DLL) @<< $(OPENSSL_LIBS) $(LINK32DLL_FLAGS) /out:"saslDIGESTMD5.dll" /implib:"saslDIGESTMD5.lib" $(saslDIGESTMD5_objs) saslDIGESTMD5.res
 <<
 	IF EXIST $@.manifest mt -manifest $@.manifest -outputresource:$@;2
 
@@ -303,12 +280,17 @@ CLEAN :
    $(CPP_PROJ) $< 
 <<
 
-.cpp.obj::
+{..\lib}.c.obj::
    $(CPP) @<<
    $(CPP_PROJ) $< 
 <<
 
-.cxx.obj::
+{..\common}.c.obj::
+   $(CPP) @<<
+   $(CPP_PROJ) $< 
+<<
+
+{..\sasldb}.c.obj::
    $(CPP) @<<
    $(CPP_PROJ) $< 
 <<
