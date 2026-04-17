@@ -1,0 +1,117 @@
+ win32/cyrus-sasl.props |  4 ++--
+ win32/openssl.props    |  2 +-
+ win32/sasl2.vcxproj    | 16 ++++++++++++----
+ win32/sasldb.props     |  2 +-
+ win32/sasldb.vcxproj   |  8 ++++----
+ 5 files changed, 20 insertions(+), 12 deletions(-)
+
+diff --git a/win32/cyrus-sasl.props b/win32/cyrus-sasl.props
+index 340034a..ac4b44c 100644
+--- a/win32/cyrus-sasl.props
++++ b/win32/cyrus-sasl.props
+@@ -5,8 +5,8 @@
+     <InstallRoot>..\..\..\msvc\$(Platform)\</InstallRoot>
+     <InstallLibDir>$(InstallRoot)\lib\</InstallLibDir>
+     <InstallBinDir>$(InstallRoot)\bin\</InstallBinDir>
+-    <SaslDependencyRoot>$(InstallRoot)</SaslDependencyRoot>
+-    <SaslDependencyLibDir>$(InstallLibDir)</SaslDependencyLibDir>
++    <SaslDependencyRoot>..\..\deps</SaslDependencyRoot>
++    <SaslDependencyLibDir>$(SaslDependencyRoot)\lib</SaslDependencyLibDir>
+     <SaslIntermediateLibDir>$(SolutionDir)$(Platform)\$(Configuration)</SaslIntermediateLibDir>
+     <Krb5Dir>C:\msvc\krb</Krb5Dir>
+   </PropertyGroup>
+diff --git a/win32/openssl.props b/win32/openssl.props
+index 86c5c41..e0e2a86 100644
+--- a/win32/openssl.props
++++ b/win32/openssl.props
+@@ -6,7 +6,7 @@
+     </ClCompile>
+     <Link>
+       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+-      <AdditionalDependencies>libeay32.lib;%(AdditionalDependencies)</AdditionalDependencies>
++      <AdditionalDependencies>$(SaslDependencyLibDir)\libcrypto.lib;%(AdditionalDependencies)</AdditionalDependencies>
+     </Link>
+   </ItemDefinitionGroup>
+ </Project>
+\ No newline at end of file
+diff --git a/win32/sasl2.vcxproj b/win32/sasl2.vcxproj
+index 42f1990..b3715f0 100644
+--- a/win32/sasl2.vcxproj
++++ b/win32/sasl2.vcxproj
+@@ -75,10 +75,18 @@
+     <Import Project="openssl.props" />
+   </ImportGroup>
+   <PropertyGroup Label="UserMacros" />
+-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
+-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
+-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
++  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
++    <TargetName>libsasl_debug</TargetName>
++  </PropertyGroup>
++  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
++    <TargetName>libsasl</TargetName>
++  </PropertyGroup>
++  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
++    <TargetName>libsasl_debug</TargetName>
++  </PropertyGroup>
++  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
++    <TargetName>libsasl</TargetName>
++  </PropertyGroup>
+   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+     <ClCompile>
+       <WarningLevel>Level3</WarningLevel>
+diff --git a/win32/sasldb.props b/win32/sasldb.props
+index 84591c9..42922e7 100644
+--- a/win32/sasldb.props
++++ b/win32/sasldb.props
+@@ -6,7 +6,7 @@
+     </ClCompile>
+     <Link>
+       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+-      <AdditionalDependencies>lmdb.lib;%(AdditionalDependencies)</AdditionalDependencies>
++      <AdditionalDependencies>liblmdb_a.lib;%(AdditionalDependencies)</AdditionalDependencies>
+     </Link>
+   </ItemDefinitionGroup>
+ </Project>
+\ No newline at end of file
+diff --git a/win32/sasldb.vcxproj b/win32/sasldb.vcxproj
+index 265e03f..7a263b0 100644
+--- a/win32/sasldb.vcxproj
++++ b/win32/sasldb.vcxproj
+@@ -125,7 +125,7 @@
+       <SDLCheck>true</SDLCheck>
+     </ClCompile>
+     <Lib>
+-      <AdditionalDependencies>lmdb.lib</AdditionalDependencies>
++      <AdditionalDependencies>liblmdb_a.lib</AdditionalDependencies>
+     </Lib>
+   </ItemDefinitionGroup>
+   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+@@ -135,7 +135,7 @@
+       <SDLCheck>true</SDLCheck>
+     </ClCompile>
+     <Lib>
+-      <AdditionalDependencies>lmdb.lib</AdditionalDependencies>
++      <AdditionalDependencies>liblmdb_a.lib</AdditionalDependencies>
+     </Lib>
+   </ItemDefinitionGroup>
+   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+@@ -151,7 +151,7 @@
+       <OptimizeReferences>true</OptimizeReferences>
+     </Link>
+     <Lib>
+-      <AdditionalDependencies>lmdb.lib</AdditionalDependencies>
++      <AdditionalDependencies>liblmdb_a.lib</AdditionalDependencies>
+     </Lib>
+   </ItemDefinitionGroup>
+   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+@@ -167,7 +167,7 @@
+       <OptimizeReferences>true</OptimizeReferences>
+     </Link>
+     <Lib>
+-      <AdditionalDependencies>lmdb.lib</AdditionalDependencies>
++      <AdditionalDependencies>liblmdb_a.lib</AdditionalDependencies>
+     </Lib>
+   </ItemDefinitionGroup>
+   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
