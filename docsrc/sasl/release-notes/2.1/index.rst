@@ -2,6 +2,124 @@
 Cyrus SASL 2.1.x Release Notes
 ==============================
 
+New in 2.1.28
+-------------
+
+* build:
+
+  - configure - Restore LIBS after checking gss_inquire_sec_context_by_oid
+  - makemd5.c - Fix potential out of bound writes
+  - fix build with --disable-shared --enable-static
+  - Dozens of fixes for Windows specific builds
+  - Fix cross platform builds with SPNEGO
+  - Do not try to build broken java subtree
+  - Fix build error with --enable-auth-sasldb
+
+* common:
+
+  - plugin_common.c:
+
+    - Ensure size is always checked if called repeatedly (#617)
+
+* documentation:
+
+  - Fixed generation of saslauthd(8) man page
+  - Fixed installation of saslauthd(8) and testsaslauthd(8) man pages (#373)
+  - Updates for additional SCRAM mechanisms
+  - Fix sasl_decode64 and sasl_encode64 man pages
+  - Tons of fixes for Sphinx
+
+* include:
+
+  - sasl.h:
+
+    - Allow up to 16 bits for security flags
+
+* lib:
+
+  - checkpw.c:
+
+    - Skip one call to strcat
+    - Disable auxprop-hashed (#374)
+
+  - client.c:
+
+    - Use proper length for fully qualified domain names
+
+  - common.c:
+
+    - CVE-2019-19906 Fix off by one error (#587)
+
+  - external.c:
+
+    - fix EXTERNAL with non-terminated input (#689)
+
+  - saslutil.c:
+
+    - fix index_64 to be a signed char (#619)
+
+* plugins:
+
+  - gssapi.c:
+
+    - Emit debug log only in case of errors
+
+  - ntlm.c:
+
+    - Fail compile if MD4 is not available (#632)
+
+  - sql.c:
+
+    - Finish reading residual return data (#639)
+
+    - CVE-2022-24407 Escape password for SQL insert/update commands.
+
+* sasldb:
+
+  - db_gdbm.c:
+
+    - fix gdbm_errno overlay from gdbm_close
+
+* DIGEST-MD5 plugin:
+
+  - Prevent double free of RC4 context
+  - Use OpenSSL RC4 implementation if available
+
+* SCRAM plugin:
+
+  - Return BADAUTH on incorrect password (#545)
+  - Add -224, -384, -512 (#552)
+  - Remove SCRAM_HASH_SIZE
+  - Add function to return SCRAM auth method name
+  - Allocate enough memory in scam_setpass()
+  - Add function to sort SCRAM methods by hash strength
+  - Update windows build for newer SCRAM options
+
+* saslauthd:
+
+  - auth_httpform.c:
+
+    - Avoid signed overflow with non-ascii characters (#576)
+
+  - auth_krb5.c:
+
+    - support setting an explicit auth_krb5 server name
+    - support setting an explicit servername with Heimdal
+    - unify the MIT and Heimdal auth_krb5 implementations
+    - Remove call to krbtf
+
+  - auth_rimap.c:
+
+    - provide native memmem implementation if missing
+
+  - lak.c:
+
+    - Allow LDAP_OPT_X_TLS_REQUIRE_CERT to be 0 (no certificate verification)
+
+  - lak.h:
+
+    - Increase supported DN length to 4096 (#626)
+
 New in 2.1.27
 -------------
 
@@ -23,9 +141,9 @@ New in 2.1.27
   - Properly compute maxbufsize AFTER security layers have been set
 
 * SCRAM plugin:
-  
+
   - Added support for SCRAM-SHA-256
-    
+
 * LOGIN plugin:
 
   - Don't prompt client for password until requested by server
@@ -40,7 +158,7 @@ New in 2.1.27
 
     - Don't use cached credentials if timeout has expired
     - Fixed debug logging output
-  
+
   - ipc_doors.c:
 
     - Fixed potential DoS attack (from Oracle)
@@ -55,7 +173,7 @@ New in 2.1.27
     - Added support for unsolicited CAPABILITY responses in LOGIN reply
     - Properly detect end of responses (don't needlessly wait)
     - Properly handle backslash in passwords
-    
+
   - auth_httpform:
 
     - Fix off-by-one error in string termination

@@ -176,6 +176,9 @@ static int mech_compare(const sasl_client_plug_t *a,
     if (a->max_ssf > b->max_ssf) return 1;
     if (a->max_ssf < b->max_ssf) return -1;
   
+    if (SASL_GET_HASH_STRENGTH(a->security_flags) > SASL_GET_HASH_STRENGTH(b->security_flags)) return 1;
+    if (SASL_GET_HASH_STRENGTH(a->security_flags) < SASL_GET_HASH_STRENGTH(b->security_flags)) return -1;
+
     return 0;
 }
 
@@ -395,7 +398,7 @@ int sasl_client_new(const char *service,
 		    sasl_conn_t **pconn)
 {
   int result;
-  char name[MAXHOSTNAMELEN];
+  char name[MAXFQDNLEN];
   sasl_client_conn_t *conn;
   sasl_utils_t *utils;
   sasl_getopt_t *getopt;
@@ -509,7 +512,7 @@ int sasl_client_new(const char *service,
   
   /* get the clientFQDN (serverFQDN was set in _sasl_conn_init) */
   memset(name, 0, sizeof(name));
-  if (get_fqhostname (name, MAXHOSTNAMELEN, 0) != 0) {
+  if (get_fqhostname (name, MAXFQDNLEN, 0) != 0) {
       return (SASL_FAIL);
   }
 

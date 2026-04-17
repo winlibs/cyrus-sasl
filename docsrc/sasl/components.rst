@@ -9,7 +9,7 @@ authentication system, there are a lot of different components
 that often cause confusion to users of the library who are trying to
 configure it for use on their system.  This document will try to provide
 some structure to all of these components, though you will also need
-to read the :ref:`System Administration <sysadmin>` to have a full
+to read the guide for SASL :ref:`System Administrators <sysadmin>` to have a full
 understanding of how to install SASL on your system.
 
 The first thing to realize is that there is a difference between SASL,
@@ -34,8 +34,8 @@ on-the-wire representation of the SASL negotiation, however it performs no
 analysis of the exchange itself.  It relies on the judgment of the SASL
 library whether authentication has occurred or not.  The application is also
 responsible for determining if the authenticated user may authorize as another
-user id (For more details on authentication and authorization identities
-and their differences, see <a href=sysadmin.html>Cyrus SASL for System Administrators</a>)
+user id (for more details on authentication and authorization identities
+and their differences, see the guide for SASL :ref:`System Administrators <sysadmin>`).
 
 Examples of applications are Cyrus IMAPd, OpenLDAP, Sendmail, Mutt,
 sieveshell, cyradm, and many others.
@@ -99,7 +99,7 @@ Plugins: SASL Mechanisms
 ------------------------
 
 The simplest types of plugins to understand are those which provide
-SASL mechanisms, such as CRAM-MD5, DIGEST-MD5, GSSAPI, PLAIN, SRP, and so on.
+SASL mechanisms, such as CRAM-MD5, DIGEST-MD5, GSSAPI, PLAIN, SCRAM, SRP, and so on.
 These mechanisms take care of both server-side and client-side parts
 of the SASL negotiation.  If the given mechanism supports a security layer
 (that is, makes guarantees about privacy or integrity of data after the
@@ -116,17 +116,20 @@ standards such as PAM and LDAP to perform that verification)
 There are several types of mechanisms, in broad strokes we have:
 
 Password Verification Mechanisms
-    For example, PLAIN.  These receive a raw password from the remote and then pass it into the glue code for
+    For example, PLAIN.
+    These receive a raw password from the remote and then pass it into the glue code for
     verification by a password verifier.  These require the existence of an
     outside security layer to hide the otherwise plaintext password from people
     who might be snooping on the wire.  These mechanisms do not require that
     the server have access to a plaintext (or plaintext-equivalent) version
     of the password.
 Shared Secret Mechanisms
-    For these mechanisms, such as CRAM-MD5, DIGEST-MD5, and SRP, there is a shared secret between the server and client
-    (e.g. a password).  However, in this case the password itself does not travel
-    on the wire.  Instead, the client passes a server a token that proves that
-    it knows the secret (without actually sending the secret across the wire).
+    For these mechanisms,
+    such as CRAM-MD5, DIGEST-MD5, OTP, SCRAM, and SRP,
+    there is a shared secret between the server and client (e.g. a password).
+    However, in this case the password itself does not travel on the wire.
+    Instead, the client passes a server a token that proves that it knows
+    the secret (without actually sending the secret across the wire).
     For these mechanisms, the server generally needs a plaintext equivalent of
     the secret to be in local storage (not true for SRP).
 Kerberos Mechanisms

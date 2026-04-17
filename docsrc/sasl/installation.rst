@@ -18,7 +18,8 @@ You can install Cyrus SASL via packages or via tarball.
 Tarball installation
 --------------------
 
-Fetch the latest Cyrus SASL tarball from ftp://ftp.cyrusimap.org/cyrus-sasl/
+Fetch the latest Cyrus SASL tarball from
+https://github.com/cyrusimap/cyrus-sasl/releases
 
 Untar it then::
 
@@ -49,7 +50,7 @@ Extra information for :ref:`Windows installation <install-windows>`. This config
 Configuration
 -------------
 
-There are two main ways to configure the SASL library for a given application. The first (and typically easiest) is to make use of the application's configuration files. Provided the application supports it (via the `SASL_CB_GETOPT` callback), please refer to that documetation for how to supply SASL options.
+There are two main ways to configure the SASL library for a given application. The first (and typically easiest) is to make use of the application's configuration files. Provided the application supports it (via the `SASL_CB_GETOPT` callback), please refer to that documentation for how to supply SASL options.
 
 Alternatively, Cyrus SASL looks for configuration files in `/usr/lib/sasl/Appname.conf` where Appname is settable by the application (for example, Sendmail 8.10 and later set this to "Sendmail").
 
@@ -74,7 +75,7 @@ installation:
 
 
 1.  What mechanisms do you want to support?  Are they plaintext (LOGIN, PLAIN),
-shared secret (DIGEST-MD5, CRAM-MD5), or Kerberos (KERBEROS_V4, GSSAPI)?
+shared secret (SCRAM, DIGEST-MD5, CRAM-MD5), or Kerberos (KERBEROS_V4, GSSAPI)?
 Perhaps you will use some combination (generally plaintext with one of
 the other two types).
 2.  Given the answer to the previous question, how will the mechanisms
@@ -93,7 +94,7 @@ Kerberos?  PAM?
 5.  Also if you are using saslauthd, what communication (IPC) method do
 you want to use?  On most systems, the correct answer is the default
 (unix sockets), but on Solaris you can use IPC doors, which have proven
-to be more stable than equivilant Solaris systems using unix sockets.
+to be more stable than equivalent Solaris systems using unix sockets.
 
 Once you have answered these questions, properly configuring a working
 configuration of Cyrus SASL becomes easier.
@@ -141,11 +142,11 @@ resources to load a given plugin, even if that plugin is otherwise unused
 (even when it is disabled via the :option:`mech_list` option).
 
 As of this writing, modules that are enabled by default but may not
-be applicable to all systems include CRAM-MD5, DIGEST-MD5, OTP, KERBEROS_V4,
-GSSAPI, PLAIN, and ANONYMOUS.  These can be disabled with::
+be applicable to all systems include CRAM-MD5, DIGEST-MD5, SCRAM, OTP,
+KERBEROS_V4, GSSAPI, PLAIN, and ANONYMOUS.  These can be disabled with::
 
-    ``--disable-cram``,
-    ``--disable-digest``, ``--disable-otp``,
+    ``--disable-cram``, ``--disable-digest``,
+    ``--disable-scram``, ``--disable-otp``,
     ``--disable-krb4``, ``--disable-gssapi``,
     ``--disable-plain``, and ``--disable-anon`` respecively.
 
@@ -164,7 +165,7 @@ build Cyrus SASL first without ldap support, then build OpenLDAP, and then come
 back to SASL and build LDAPDB.
 
 Given the myriad of ways that Berkeley DB can be installed on a system,
-people useing it may want to look at the ``--with-bdb-libdir`` and
+people using it may want to look at the ``--with-bdb-libdir`` and
 ``--with-bdb-incdir`` as alternatives to ``--with-dbbase`` for
 specifying the paths to the Berkeley DB Library and Include directories.
 
@@ -200,7 +201,7 @@ our platforms by looking at the "SMakefile".
 Application Configuration
 -------------------------
 
-Plesae read about the :ref:`SASL Options <options>` to learn what
+Please read about the :ref:`SASL Options <options>` to learn what
 needs to be configured so that applications can successfully use the SASL
 library.
 
