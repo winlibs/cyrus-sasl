@@ -1,0 +1,33 @@
+ common/plugin_common.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/common/plugin_common.c b/common/plugin_common.c
+index 9bb992f..60a693d 100644
+--- a/common/plugin_common.c
++++ b/common/plugin_common.c
+@@ -46,7 +46,9 @@
+ #ifndef macintosh
+ #ifdef WIN32
+ # include <winsock2.h>
++# if 0
+ # include <versionhelpers.h>
++# endif
+ #else
+ # include <sys/socket.h>
+ # include <netinet/in.h>
+@@ -830,6 +832,7 @@ void _plug_snprintf_os_info (char * osbuf, int osbuf_len)
+     char *sysname;
+     sysname = "Unknown Windows";
+ 
++# if 0
+ /* Let's suppose it's still compilable with win2k sdk. So define everythig missing */
+ #ifndef _WIN32_WINNT_WINXP
+ # define _WIN32_WINNT_WINXP                  0x0501
+@@ -899,6 +902,7 @@ void _plug_snprintf_os_info (char * osbuf, int osbuf_len)
+     if (IsWindowsVersionOrGreater(HIBYTE(_WIN32_WINNT_WINXP), LOBYTE(_WIN32_WINNT_WINXP), 0)) {
+         sysname = "Windows XP";
+     }
++# endif
+ 
+ 	snprintf(osbuf, osbuf_len, "%s", sysname);
+ 
